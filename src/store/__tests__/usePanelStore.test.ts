@@ -76,7 +76,7 @@ describe("usePanelStore - Default 2D & Context Menu Actions", () => {
     const state = usePanelStore.getState();
     expect(state.components.length).toBe(beforeCount + 1);
     const dup = state.components.find((c) => c.id === newId)!;
-    expect(dup.name).toBe("Motor Contactor KM2");
+    expect(dup.name).toBe("KM2");
     expect(dup.xMm).toBe(source.xMm + 20);
     expect(dup.yMm).toBe(source.yMm);
     expect(dup.pins.length).toBe(source.pins.length);
@@ -472,9 +472,118 @@ describe("usePanelStore - Default 2D & Context Menu Actions", () => {
     expect(pastedComp.id).not.toBe(c1.id);
     expect(pastedComp.xMm).toBe(c1.xMm + 15);
     expect(pastedComp.yMm).toBe(c1.yMm - 15);
-    expect(pastedComp.name).toContain(c1.name);
+    expect(pastedComp.name).toBe("QF3");
     expect(pastedComp.pins.length).toBe(c1.pins.length);
     expect(pastedComp.pins[0].id).not.toBe(c1.pins[0].id);
+  });
+
+  it("respects mountingType behavior: screw_plate and door_cutout do not snap to DIN rail when moved", () => {
+    const store = usePanelStore.getState();
+    // Place VFD in duct-free backplate space (between rail-2 y=40 and rail-3 y=-140, center y=-50)
+    store.addComponent("vfd-15kw", undefined, { xMm: 100, yMm: -50 });
+    const vfd = usePanelStore.getState().components.find((c) => c.templateId === "vfd-15kw")!;
+    expect(vfd.railId).toBeNull();
+    expect(vfd.name).toBe("U1");
+
+    // Move VFD to duct-free space near rail-2 (y=20): must NOT snap to rail-2 (y=40)
+    usePanelStore.getState().moveComponent(vfd.id, 110, -40);
+    const movedVfd = usePanelStore.getState().components.find((c) => c.id === vfd.id)!;
+    expect(movedVfd.railId).toBeNull();
+    expect(movedVfd.yMm).toBe(-40);
+
+    // Moving VFD onto horizontal Mid Duct (y=120, h=40) must push it out of the duct
+    usePanelStore.getState().moveComponent(vfd.id, 110, 120);
+    const ductFreeVfd = usePanelStore.getState().components.find((c) => c.id === vfd.id)!;
+    expect(Math.abs(ductFreeVfd.yMm - 120)).toBeGreaterThanOrEqual((ductFreeVfd.heightMm + 40) / 2 - 0.1);
+
+    // Moving DIN-rail component (comp-1, QF1) toward Left Vertical Duct (x=-230, w=40 -> right edge -210)
+    // must clamp strictly on rail-1 (y=200) and NOT overlap the vertical duct
+    usePanelStore.getState().moveComponent("comp-1", -230, 280, { skipGridSnapY: true });
+    const movedMcb = usePanelStore.getState().components.find((c) => c.id === "comp-1")!;
+    expect(movedMcb.railId).toBe("rail-1");
+    expect(movedMcb.yMm).toBe(200);
+    expect(movedMcb.xMm - movedMcb.widthMm / 2).toBeGreaterThanOrEqual(-210 - 0.1);
+
+    // Door cutout component must stay free of DIN rails and unaffected by backplate ducts
+    usePanelStore.getState().addComponent("pilot-lamp-red", undefined, { xMm: -50, yMm: 180 });
+    const lamp = usePanelStore.getState().components.find((c) => c.templateId === "pilot-lamp-red")!;
+    expect(lamp.railId).toBeNull();
+    expect(lamp.name).toBe("HR1");
+    usePanelStore.getState().moveComponent(lamp.id, -40, 190);
+    const movedLamp = usePanelStore.getState().components.find((c) => c.id === lamp.id)!;
+    expect(movedLamp.railId).toBeNull();
+    expect(movedLamp.yMm).toBe(190);
+  });
+
+  it("blocks adding DIN-rail components when no DIN rail exists on the sheet", () => {
+    const store = usePanelStore.getState();
+    store.addSheet("mounting-plate", "Empty Sheet");
+    expect(usePanelStore.getState().rails.length).toBe(0);
+    usePanelStore.getState().addComponent("mcb-1p", undefined, { xMm: 0, yMm: 0 });
+    expect(usePanelStore.getState().components.length).toBe(0);
+  });
+
+  it("keeps bound wire endpoints locked to pins when a connected component moves", () => {
+    const store = usePanelStore.getState();
+    store.addWire({
+      label: "W99",
+      colorCode: "R",
+      gaugeMm2: "2.5",
+      fromComponentId: "comp-1",
+      fromPinId: "comp-1-pin-4",
+      toComponentId: "comp-4",
+      toPinId: "comp-4-pin-1",
+    });
+    const beforeWire = usePanelStore.getState().wires.find((w) => w.label === "W99")!;
+    expect(beforeWire.waypoints && beforeWire.waypoints.length >= 2).toBe(true);
+    const startXBefore = beforeWire.waypoints![0].xMm;
+
+    // Move comp-1 along rail-1 by +60mm
+    usePanelStore.getState().moveComponent("comp-1", -100, 200);
+    const movedComp = usePanelStore.getState().components.find((c) => c.id === "comp-1")!;
+    const afterWire = usePanelStore.getState().wires.find((w) => w.label === "W99")!;
+    const pin4 = movedComp.pins.find((p) => p.id === "comp-1-pin-4")!;
+    expect(afterWire.waypoints![0].xMm).toBeCloseTo(movedComp.xMm + pin4.localXMm, 2);
+    expect(afterWire.waypoints![0].xMm).not.toBeCloseTo(startXBefore, 1);
+  });
+
+  it("moves all bound components, mounted TOR children, and connected wires when a DIN rail moves", () => {
+    const store = usePanelStore.getState();
+    // Mount a TOR under comp-4 (Contactor on rail-2 at y=40)
+    store.setSelected({ kind: "component", id: "comp-4" });
+    store.addComponent("tor");
+
+    const beforeContactor = usePanelStore.getState().components.find((c) => c.id === "comp-4")!;
+    const beforeTor = usePanelStore.getState().components.find((c) => c.templateId === "tor")!;
+    expect(beforeContactor.railId).toBe("rail-2");
+    expect(beforeTor.mountedToComponentId).toBe("comp-4");
+
+    // Move rail-2 by dx=+20, dy=-30 (from x=0, y=40 to x=20, y=10)
+    usePanelStore.getState().updateRail("rail-2", { xMm: 20, yMm: 10 });
+
+    const state = usePanelStore.getState();
+    const afterContactor = state.components.find((c) => c.id === "comp-4")!;
+    const afterTor = state.components.find((c) => c.templateId === "tor")!;
+    expect(afterContactor.xMm).toBe(beforeContactor.xMm + 20);
+    expect(afterContactor.yMm).toBe(10);
+    expect(afterTor.xMm).toBe(afterContactor.xMm);
+    expect(afterTor.yMm).toBeCloseTo(10 - afterContactor.heightMm / 2 - afterTor.heightMm / 2, 2);
+  });
+
+  it("supports undo and redo for toggling autoRouteDuctsEnabled and wire routes", () => {
+    const store = usePanelStore.getState();
+    expect(store.autoRouteDuctsEnabled).toBe(true);
+
+    store.setAutoRouteDuctsEnabled(false);
+    expect(usePanelStore.getState().autoRouteDuctsEnabled).toBe(false);
+    expect(usePanelStore.getState().canUndo).toBe(true);
+
+    usePanelStore.getState().undo();
+    expect(usePanelStore.getState().autoRouteDuctsEnabled).toBe(true);
+    expect(usePanelStore.getState().canRedo).toBe(true);
+
+    usePanelStore.getState().redo();
+    expect(usePanelStore.getState().autoRouteDuctsEnabled).toBe(false);
   });
 
   it("handles grouping (Ctrl+G), paired drag movement, and ungrouping (Ctrl+Shift+G)", () => {

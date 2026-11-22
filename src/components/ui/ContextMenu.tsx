@@ -88,6 +88,10 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
   const duplicateRail = usePanelStore((s) => s.duplicateRail);
   const removeRail = usePanelStore((s) => s.removeRail);
   const alignComponentsOnRail = usePanelStore((s) => s.alignComponentsOnRail);
+  const alignItemToPlate = usePanelStore((s) => s.alignItemToPlate);
+  const alignComponentToRail = usePanelStore((s) => s.alignComponentToRail);
+  const autoResizeToFit = usePanelStore((s) => s.autoResizeToFit);
+  const autoResizeSelectedToFit = usePanelStore((s) => s.autoResizeSelectedToFit);
 
   const duplicateDuct = usePanelStore((s) => s.duplicateDuct);
   const removeDuct = usePanelStore((s) => s.removeDuct);
@@ -199,9 +203,9 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
   const submenuPanelBase =
     "rounded-lg border border-[#e2e8f0] dark:border-slate-700/80 bg-white/98 dark:bg-[#12161f]/98 p-1 shadow-xl dark:shadow-2xl backdrop-blur-md";
   const menuHeaderClass =
-    "border-b border-[#e2e8f0] dark:border-slate-800/80 px-2.5 py-1.5 font-mono text-[10px] text-[#64748b] dark:text-slate-400";
+    "border-b border-[#e2e8f0] dark:border-slate-800/80 px-2.5 py-1.5 font-sans text-[10px] text-[#64748b] dark:text-slate-400";
   const menuItemClass =
-    "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300";
+    "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white";
   const menuDangerClass =
     "flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-700 dark:hover:text-rose-300";
 
@@ -220,12 +224,9 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
       {/* COMPONENT TARGET */}
       {target.kind === "component" && currentComp && (
         <>
-          <div className="border-b border-[#e2e8f0] dark:border-slate-800/80 px-2.5 py-1.5 font-mono text-[10px] text-[#64748b] dark:text-slate-400">
-            <div className="font-semibold text-sky-400 truncate max-w-[220px]">
+          <div className="border-b border-[#e2e8f0] dark:border-slate-800/80 px-2.5 py-1.5 font-sans text-[10px] text-[#64748b] dark:text-slate-400">
+            <div className="font-semibold text-slate-900 dark:text-white truncate max-w-[220px]">
               {currentComp.name}
-            </div>
-            <div className="text-[9px] text-slate-500">
-              {currentComp.templateId.toUpperCase()} • ROT: {currentComp.rotationDeg ?? 0}°
             </div>
           </div>
 
@@ -236,11 +237,11 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
                 rotateComponent(currentComp.id, 90);
                 onClose();
               }}
-              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300"
+              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
             >
-              <RotateCw className="h-3.5 w-3.5 text-sky-400" />
+              <RotateCw className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
               <span>Rotate 90°</span>
-              <span className="ml-auto font-mono text-[9px] text-slate-500">R</span>
+              <span className="ml-auto font-sans text-[9px] text-slate-500">R</span>
             </button>
 
             <button
@@ -249,11 +250,11 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
                 copySelectedToClipboard();
                 onClose();
               }}
-              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300"
+              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
             >
-              <Copy className="h-3.5 w-3.5 text-cyan-400" />
+              <Copy className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
               <span>Copy</span>
-              <span className="ml-auto font-mono text-[9px] text-slate-500">Ctrl+C</span>
+              <span className="ml-auto font-sans text-[9px] text-slate-500">Ctrl+C</span>
             </button>
 
             {clipboardItems.length > 0 && (
@@ -263,11 +264,11 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
                   pasteFromClipboard();
                   onClose();
                 }}
-                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300"
+                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
               >
-                <Copy className="h-3.5 w-3.5 text-emerald-400" />
+                <Copy className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
                 <span>Paste</span>
-                <span className="ml-auto font-mono text-[9px] text-slate-500">Ctrl+V</span>
+                <span className="ml-auto font-sans text-[9px] text-slate-500">Ctrl+V</span>
               </button>
             )}
 
@@ -277,16 +278,16 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
                 toggleLockSelectedItems();
                 onClose();
               }}
-              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300"
+              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
             >
               {currentComp.locked ? (
                 <>
-                  <Unlock className="h-3.5 w-3.5 text-amber-400" />
+                  <Unlock className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
                   <span>Unlock Position</span>
                 </>
               ) : (
                 <>
-                  <Lock className="h-3.5 w-3.5 text-amber-400" />
+                  <Lock className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
                   <span>Lock Position</span>
                 </>
               )}
@@ -303,9 +304,9 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
                     }
                     onClose();
                   }}
-                  className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300"
+                  className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
                 >
-                  <Users className="h-3.5 w-3.5 text-indigo-400" />
+                  <Users className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
                   <span>Rename Group</span>
                 </button>
                 <button
@@ -314,11 +315,11 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
                     ungroupSelectedItems();
                     onClose();
                   }}
-                  className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300"
+                  className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
                 >
-                  <Layers className="h-3.5 w-3.5 text-purple-400" />
+                  <Layers className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
                   <span>Ungroup (Ctrl+Shift+G)</span>
-                  <span className="ml-auto font-mono text-[9px] text-slate-500">Ctrl+Shift+G</span>
+                  <span className="ml-auto font-sans text-[9px] text-slate-500">Ctrl+Shift+G</span>
                 </button>
               </>
             )}
@@ -329,11 +330,11 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
                 duplicateComponent(currentComp.id, { x: 20, y: 0 });
                 onClose();
               }}
-              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300"
+              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
             >
-              <Copy className="h-3.5 w-3.5 text-emerald-400" />
+              <Copy className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
               <span>Duplicate</span>
-              <span className="ml-auto font-mono text-[9px] text-slate-500">+20mm</span>
+              <span className="ml-auto font-sans text-[9px] text-slate-500">+20mm</span>
             </button>
 
             <button
@@ -342,11 +343,71 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
                 snapComponentToRail(currentComp.id);
                 onClose();
               }}
-              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300"
+              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
             >
-              <Magnet className="h-3.5 w-3.5 text-amber-400" />
+              <Magnet className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
               <span>Snap to DIN Rail</span>
             </button>
+
+            {/* Align Component (to Rail if mounted on rail, or to Mounting Plate) */}
+            <div
+              className="relative"
+              onMouseEnter={() => setOpenSubmenu("comp-align")}
+              onMouseLeave={() => setOpenSubmenu(null)}
+            >
+              <button
+                type="button"
+                className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
+              >
+                <span className="flex items-center gap-2">
+                  <ArrowRightLeft className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
+                  {currentComp.railId ? "Align to Rail" : "Align to Plate"}
+                </span>
+                <ChevronRight className="h-3 w-3 text-slate-500" />
+              </button>
+
+              {openSubmenu === "comp-align" && (
+                <div className={`absolute top-0 ${submenuPosClass} w-40 rounded-lg border border-[#e2e8f0] dark:border-slate-700/80 bg-white/98 dark:bg-[#12161f]/98 p-1 shadow-xl dark:shadow-2xl backdrop-blur-md`}>
+                  {currentComp.railId ? (
+                    <>
+                      {(["left", "center", "right"] as const).map((edge) => (
+                        <button
+                          key={edge}
+                          type="button"
+                          onClick={() => {
+                            alignComponentToRail(currentComp.id, edge);
+                            onClose();
+                          }}
+                          className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left capitalize text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
+                        >
+                          {edge === "left" && <AlignLeft className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />}
+                          {edge === "center" && <AlignCenter className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />}
+                          {edge === "right" && <AlignRight className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />}
+                          <span>Align {edge}</span>
+                        </button>
+                      ))}
+                    </>
+                  ) : (
+                    <>
+                      {(["top", "bottom", "left", "right"] as const).map((edge) => (
+                        <button
+                          key={edge}
+                          type="button"
+                          onClick={() => {
+                            alignItemToPlate({ kind: "component", id: currentComp.id }, edge);
+                            onClose();
+                          }}
+                          className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left capitalize text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
+                        >
+                          <AlignJustify className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
+                          <span>Align {edge}</span>
+                        </button>
+                      ))}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
 
             <button
               type="button"
@@ -355,7 +416,7 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
                 requestInspectorFocus();
                 onClose();
               }}
-              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300"
+              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
             >
               <Sliders className="h-3.5 w-3.5 text-slate-400" />
               <span>Edit Tag / Properties</span>
@@ -381,12 +442,9 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
       {/* CAD ASSET TARGET */}
       {target.kind === "cad" && currentCad && (
         <>
-          <div className="border-b border-[#e2e8f0] dark:border-slate-800/80 px-2.5 py-1.5 font-mono text-[10px] text-[#64748b] dark:text-slate-400">
-            <div className="font-semibold text-sky-400 truncate max-w-[220px]">
+          <div className="border-b border-[#e2e8f0] dark:border-slate-800/80 px-2.5 py-1.5 font-sans text-[10px] text-[#64748b] dark:text-slate-400">
+            <div className="font-semibold text-slate-900 dark:text-white truncate max-w-[220px]">
               {currentCad.name}
-            </div>
-            <div className="text-[9px] text-slate-500">
-              CAD ASSET [{currentCad.format.toUpperCase()}] • ROT: {currentCad.rotationDeg ?? 0}°
             </div>
           </div>
 
@@ -397,9 +455,9 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
                 rotateCadAsset(currentCad.id, 90);
                 onClose();
               }}
-              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300"
+              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
             >
-              <RotateCw className="h-3.5 w-3.5 text-sky-400" />
+              <RotateCw className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
               <span>Rotate 90°</span>
             </button>
 
@@ -409,11 +467,11 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
                 copySelectedToClipboard();
                 onClose();
               }}
-              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300"
+              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
             >
-              <Copy className="h-3.5 w-3.5 text-cyan-400" />
+              <Copy className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
               <span>Copy</span>
-              <span className="ml-auto font-mono text-[9px] text-slate-500">Ctrl+C</span>
+              <span className="ml-auto font-sans text-[9px] text-slate-500">Ctrl+C</span>
             </button>
 
             {clipboardItems.length > 0 && (
@@ -423,11 +481,11 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
                   pasteFromClipboard();
                   onClose();
                 }}
-                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300"
+                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
               >
-                <Copy className="h-3.5 w-3.5 text-emerald-400" />
+                <Copy className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
                 <span>Paste</span>
-                <span className="ml-auto font-mono text-[9px] text-slate-500">Ctrl+V</span>
+                <span className="ml-auto font-sans text-[9px] text-slate-500">Ctrl+V</span>
               </button>
             )}
 
@@ -437,16 +495,16 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
                 toggleLockSelectedItems();
                 onClose();
               }}
-              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300"
+              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
             >
               {currentCad.locked ? (
                 <>
-                  <Unlock className="h-3.5 w-3.5 text-amber-400" />
+                  <Unlock className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
                   <span>Unlock Position</span>
                 </>
               ) : (
                 <>
-                  <Lock className="h-3.5 w-3.5 text-amber-400" />
+                  <Lock className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
                   <span>Lock Position</span>
                 </>
               )}
@@ -463,9 +521,9 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
                     }
                     onClose();
                   }}
-                  className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300"
+                  className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
                 >
-                  <Users className="h-3.5 w-3.5 text-indigo-400" />
+                  <Users className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
                   <span>Rename Group</span>
                 </button>
                 <button
@@ -474,11 +532,11 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
                     ungroupSelectedItems();
                     onClose();
                   }}
-                  className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300"
+                  className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
                 >
-                  <Layers className="h-3.5 w-3.5 text-purple-400" />
+                  <Layers className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
                   <span>Ungroup (Ctrl+Shift+G)</span>
-                  <span className="ml-auto font-mono text-[9px] text-slate-500">Ctrl+Shift+G</span>
+                  <span className="ml-auto font-sans text-[9px] text-slate-500">Ctrl+Shift+G</span>
                 </button>
               </>
             )}
@@ -489,9 +547,9 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
                 duplicateCadAsset(currentCad.id, { x: 20, y: 0 });
                 onClose();
               }}
-              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300"
+              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
             >
-              <Copy className="h-3.5 w-3.5 text-emerald-400" />
+              <Copy className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
               <span>Duplicate</span>
             </button>
 
@@ -526,9 +584,9 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
                 }
                 onClose();
               }}
-              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300"
+              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
             >
-              <Plus className="h-3.5 w-3.5 text-cyan-400" />
+              <Plus className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
               <span>Save to My CAD Library</span>
             </button>
 
@@ -539,7 +597,7 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
                 requestInspectorFocus();
                 onClose();
               }}
-              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300"
+              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
             >
               <Sliders className="h-3.5 w-3.5 text-slate-400" />
               <span>Edit CAD Properties</span>
@@ -565,12 +623,9 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
       {/* DIN RAIL TARGET */}
       {target.kind === "rail" && currentRail && (
         <>
-          <div className="border-b border-[#e2e8f0] dark:border-slate-800/80 px-2.5 py-1.5 font-mono text-[10px] text-[#64748b] dark:text-slate-400">
-            <div className="font-semibold text-amber-400 truncate max-w-[220px]">
+          <div className="border-b border-[#e2e8f0] dark:border-slate-800/80 px-2.5 py-1.5 font-sans text-[10px] text-[#64748b] dark:text-slate-400">
+            <div className="font-semibold text-slate-900 dark:text-white truncate max-w-[220px]">
               {currentRail.name}
-            </div>
-            <div className="text-[9px] text-slate-500">
-              DIN RAIL 35mm • {currentRail.lengthMm}mm
             </div>
           </div>
 
@@ -581,11 +636,11 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
                 duplicateRail(currentRail.id, { x: 0, y: -120 });
                 onClose();
               }}
-              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300"
+              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
             >
-              <Copy className="h-3.5 w-3.5 text-emerald-400" />
+              <Copy className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
               <span>Duplicate Parallel</span>
-              <span className="ml-auto font-mono text-[9px] text-slate-500">-120mm</span>
+              <span className="ml-auto font-sans text-[9px] text-slate-500">-120mm</span>
             </button>
 
             {/* Align Components Submenu */}
@@ -596,10 +651,10 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
             >
               <button
                 type="button"
-                className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300"
+                className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
               >
                 <span className="flex items-center gap-2">
-                  <ArrowRightLeft className="h-3.5 w-3.5 text-sky-400" />
+                  <ArrowRightLeft className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
                   Align Components
                 </span>
                 <ChevronRight className="h-3 w-3 text-slate-500" />
@@ -613,9 +668,9 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
                       alignComponentsOnRail(currentRail.id, "distribute");
                       onClose();
                     }}
-                    className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300"
+                    className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
                   >
-                    <AlignJustify className="h-3.5 w-3.5 text-sky-400" />
+                    <AlignJustify className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
                     <span>Distribute Evenly</span>
                   </button>
                   <button
@@ -624,9 +679,9 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
                       alignComponentsOnRail(currentRail.id, "left");
                       onClose();
                     }}
-                    className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300"
+                    className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
                   >
-                    <AlignLeft className="h-3.5 w-3.5 text-sky-400" />
+                    <AlignLeft className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
                     <span>Align Left</span>
                   </button>
                   <button
@@ -635,9 +690,9 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
                       alignComponentsOnRail(currentRail.id, "center");
                       onClose();
                     }}
-                    className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300"
+                    className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
                   >
-                    <AlignCenter className="h-3.5 w-3.5 text-sky-400" />
+                    <AlignCenter className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
                     <span>Align Center</span>
                   </button>
                   <button
@@ -646,11 +701,59 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
                       alignComponentsOnRail(currentRail.id, "right");
                       onClose();
                     }}
-                    className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300"
+                    className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
                   >
-                    <AlignRight className="h-3.5 w-3.5 text-sky-400" />
+                    <AlignRight className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
                     <span>Align Right</span>
                   </button>
+                </div>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                autoResizeToFit({ kind: "rail", id: currentRail.id });
+                onClose();
+              }}
+              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
+            >
+              <Maximize2 className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
+              <span>Auto-Resize to Width</span>
+            </button>
+
+            <div
+              className="relative"
+              onMouseEnter={() => setOpenSubmenu("rail-plate-align")}
+              onMouseLeave={() => setOpenSubmenu(null)}
+            >
+              <button
+                type="button"
+                className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
+              >
+                <span className="flex items-center gap-2">
+                  <ArrowRightLeft className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
+                  Align to Plate
+                </span>
+                <ChevronRight className="h-3 w-3 text-slate-500" />
+              </button>
+
+              {openSubmenu === "rail-plate-align" && (
+                <div className={`absolute top-0 ${submenuPosClass} w-40 rounded-lg border border-[#e2e8f0] dark:border-slate-700/80 bg-white/98 dark:bg-[#12161f]/98 p-1 shadow-xl dark:shadow-2xl backdrop-blur-md`}>
+                  {(["top", "bottom", "left", "right"] as const).map((edge) => (
+                    <button
+                      key={edge}
+                      type="button"
+                      onClick={() => {
+                        alignItemToPlate({ kind: "rail", id: currentRail.id }, edge);
+                        onClose();
+                      }}
+                      className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left capitalize text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
+                    >
+                      <AlignJustify className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
+                      <span>Align {edge}</span>
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
@@ -675,12 +778,9 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
       {/* WIRE DUCT TARGET */}
       {target.kind === "duct" && currentDuct && (
         <>
-          <div className="border-b border-[#e2e8f0] dark:border-slate-800/80 px-2.5 py-1.5 font-mono text-[10px] text-[#64748b] dark:text-slate-400">
-            <div className="font-semibold text-slate-300 truncate max-w-[220px]">
+          <div className="border-b border-[#e2e8f0] dark:border-slate-800/80 px-2.5 py-1.5 font-sans text-[10px] text-[#64748b] dark:text-slate-400">
+            <div className="font-semibold text-slate-900 dark:text-white truncate max-w-[220px]">
               {currentDuct.name}
-            </div>
-            <div className="text-[9px] text-slate-500">
-              DUCT ({currentDuct.orientation.toUpperCase()}) • {currentDuct.widthMm}×{currentDuct.heightMm}mm
             </div>
           </div>
 
@@ -691,14 +791,66 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
                 duplicateDuct(currentDuct.id);
                 onClose();
               }}
-              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300"
+              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
             >
-              <Copy className="h-3.5 w-3.5 text-emerald-400" />
+              <Copy className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
               <span>Duplicate Parallel</span>
-              <span className="ml-auto font-mono text-[9px] text-slate-500">
+              <span className="ml-auto font-sans text-[9px] text-slate-500">
                 {currentDuct.orientation === "vertical" ? "+80mm" : "-120mm"}
               </span>
             </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                autoResizeToFit({ kind: "duct", id: currentDuct.id });
+                onClose();
+              }}
+              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
+            >
+              <Maximize2 className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
+              <span>
+                {currentDuct.orientation === "horizontal"
+                  ? "Auto-Resize to Width"
+                  : "Auto-Resize to Height"}
+              </span>
+            </button>
+
+            <div
+              className="relative"
+              onMouseEnter={() => setOpenSubmenu("duct-plate-align")}
+              onMouseLeave={() => setOpenSubmenu(null)}
+            >
+              <button
+                type="button"
+                className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
+              >
+                <span className="flex items-center gap-2">
+                  <ArrowRightLeft className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
+                  Align to Plate
+                </span>
+                <ChevronRight className="h-3 w-3 text-slate-500" />
+              </button>
+
+              {openSubmenu === "duct-plate-align" && (
+                <div className={`absolute top-0 ${submenuPosClass} w-40 rounded-lg border border-[#e2e8f0] dark:border-slate-700/80 bg-white/98 dark:bg-[#12161f]/98 p-1 shadow-xl dark:shadow-2xl backdrop-blur-md`}>
+                  {(["top", "bottom", "left", "right"] as const).map((edge) => (
+                    <button
+                      key={edge}
+                      type="button"
+                      onClick={() => {
+                        alignItemToPlate({ kind: "duct", id: currentDuct.id }, edge);
+                        onClose();
+                      }}
+                      className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left capitalize text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
+                    >
+                      <AlignJustify className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
+                      <span>Align {edge}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="border-t border-[#e2e8f0] dark:border-slate-800/80 pt-1">
@@ -720,12 +872,9 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
       {/* WIRE CONNECTION TARGET */}
       {target.kind === "wire" && currentWire && (
         <>
-          <div className="border-b border-[#e2e8f0] dark:border-slate-800/80 px-2.5 py-1.5 font-mono text-[10px] text-[#64748b] dark:text-slate-400">
-            <div className="font-semibold text-sky-400 truncate max-w-[220px]">
+          <div className="border-b border-[#e2e8f0] dark:border-slate-800/80 px-2.5 py-1.5 font-sans text-[10px] text-[#64748b] dark:text-slate-400">
+            <div className="font-semibold text-slate-900 dark:text-white truncate max-w-[220px]">
               Wire {currentWire.label} ({currentWire.colorCode})
-            </div>
-            <div className="text-[9px] text-slate-500">
-              Cross-section: {currentWire.gaugeMm2} mm²
             </div>
           </div>
 
@@ -738,7 +887,7 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
             >
               <button
                 type="button"
-                className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300"
+                className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
               >
                 <span className="flex items-center gap-2">
                   <span
@@ -764,7 +913,7 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
                         updateWire(currentWire.id, { colorCode: c.code });
                         onClose();
                       }}
-                      className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300"
+                      className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
                     >
                       <span
                         className="inline-block h-2.5 w-2.5 rounded-full"
@@ -785,7 +934,7 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
             >
               <button
                 type="button"
-                className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300"
+                className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
               >
                 <span className="flex items-center gap-2">
                   <Sliders className="h-3.5 w-3.5 text-slate-400" />
@@ -804,10 +953,10 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
                         updateWire(currentWire.id, { gaugeMm2: g });
                         onClose();
                       }}
-                      className={`flex w-full items-center justify-between rounded px-2 py-1 text-left font-mono text-[11px] ${
+                      className={`flex w-full items-center justify-between rounded px-2 py-1 text-left font-sans text-[11px] ${
                         currentWire.gaugeMm2 === g
-                          ? "bg-sky-600/30 font-bold text-sky-300"
-                          : "text-slate-200 hover:bg-sky-600/20 hover:text-sky-300"
+                          ? "bg-slate-900 text-white dark:bg-white dark:text-black font-semibold"
+                          : "text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
                       }`}
                     >
                       <span>{g} mm²</span>
@@ -825,9 +974,9 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
                 autoRouteWire(currentWire.id);
                 onClose();
               }}
-              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300"
+              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
             >
-              <Network className="h-3.5 w-3.5 text-sky-500" />
+              <Network className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
               <span>Auto-Route via Duct</span>
             </button>
           </div>
@@ -849,29 +998,64 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
       )}
 
       {/* MULTI-SELECT TARGET */}
-      {target.kind === "multi" && (
-        <>
-          <div className="border-b border-[#e2e8f0] dark:border-slate-800/80 px-2.5 py-1.5 font-mono text-[10px] text-[#64748b] dark:text-slate-400">
-            <div className="font-semibold text-sky-400">
+      {target.kind === "multi" && (() => {
+        const orientations = selectedIds.map((sel) => {
+          if (sel.kind === "rail") return "horizontal";
+          if (sel.kind === "duct") {
+            return ducts.find((d) => d.id === sel.id)?.orientation ?? null;
+          }
+          return null;
+        });
+        const hasResizable = selectedIds.some(
+          (sel) => sel.kind === "rail" || sel.kind === "duct"
+        );
+        const allHorizontal =
+          selectedIds.length > 0 && orientations.every((o) => o === "horizontal");
+        const allVertical =
+          selectedIds.length > 0 && orientations.every((o) => o === "vertical");
+        const canAutoResize = allHorizontal || allVertical;
+
+        return (
+          <>
+          <div className="border-b border-[#e2e8f0] dark:border-slate-800/80 px-2.5 py-1.5 font-sans text-[10px] text-[#64748b] dark:text-slate-400">
+            <div className="font-semibold text-slate-900 dark:text-white">
               {selectedIds.length} ITEMS SELECTED
-            </div>
-            <div className="text-[9px] text-slate-500">
-              Bulk Actions
             </div>
           </div>
 
           <div className="py-1">
+            {hasResizable && (
+              <button
+                type="button"
+                disabled={!canAutoResize}
+                title={
+                  !canAutoResize
+                    ? "Requires all selected items to have the same orientation"
+                    : undefined
+                }
+                onClick={() => {
+                  autoResizeSelectedToFit();
+                  onClose();
+                }}
+                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white disabled:opacity-40 disabled:pointer-events-none"
+              >
+                <Maximize2 className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
+                <span>
+                  {allVertical ? "Auto-Resize to Height" : "Auto-Resize to Width"}
+                </span>
+              </button>
+            )}
             <button
               type="button"
               onClick={() => {
                 copySelectedToClipboard();
                 onClose();
               }}
-              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300"
+              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
             >
-              <Copy className="h-3.5 w-3.5 text-cyan-400" />
+              <Copy className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
               <span>Copy Selected</span>
-              <span className="ml-auto font-mono text-[9px] text-slate-500">Ctrl+C</span>
+              <span className="ml-auto font-sans text-[9px] text-slate-500">Ctrl+C</span>
             </button>
 
             {clipboardItems.length > 0 && (
@@ -881,11 +1065,11 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
                   pasteFromClipboard();
                   onClose();
                 }}
-                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300"
+                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
               >
-                <Copy className="h-3.5 w-3.5 text-emerald-400" />
+                <Copy className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
                 <span>Paste</span>
-                <span className="ml-auto font-mono text-[9px] text-slate-500">Ctrl+V</span>
+                <span className="ml-auto font-sans text-[9px] text-slate-500">Ctrl+V</span>
               </button>
             )}
 
@@ -896,11 +1080,11 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
                 groupSelectedItems();
                 onClose();
               }}
-              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300 disabled:opacity-40"
+              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white disabled:opacity-40"
             >
-              <Users className="h-3.5 w-3.5 text-indigo-400" />
+              <Users className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
               <span>Group (Ctrl+G)</span>
-              <span className="ml-auto font-mono text-[9px] text-slate-500">Ctrl+G</span>
+              <span className="ml-auto font-sans text-[9px] text-slate-500">Ctrl+G</span>
             </button>
 
             <button
@@ -909,11 +1093,11 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
                 ungroupSelectedItems();
                 onClose();
               }}
-              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300"
+              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
             >
-              <Layers className="h-3.5 w-3.5 text-purple-400" />
+              <Layers className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
               <span>Ungroup (Ctrl+Shift+G)</span>
-              <span className="ml-auto font-mono text-[9px] text-slate-500">Ctrl+Shift+G</span>
+              <span className="ml-auto font-sans text-[9px] text-slate-500">Ctrl+Shift+G</span>
             </button>
 
             <button
@@ -922,9 +1106,9 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
                 toggleLockSelectedItems();
                 onClose();
               }}
-              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300"
+              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
             >
-              <Lock className="h-3.5 w-3.5 text-amber-400" />
+              <Lock className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
               <span>Lock / Unlock Position</span>
             </button>
 
@@ -935,10 +1119,10 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
             >
               <button
                 type="button"
-                className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300"
+                className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
               >
                 <span className="flex items-center gap-2">
-                  <AlignLeft className="h-3.5 w-3.5 text-sky-400" />
+                  <AlignLeft className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
                   <span>Align Selected</span>
                 </span>
                 <ChevronRight className="h-3 w-3 text-slate-500" />
@@ -952,9 +1136,9 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
                       alignSelectedItems("left");
                       onClose();
                     }}
-                    className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300"
+                    className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
                   >
-                    <AlignLeft className="h-3.5 w-3.5 text-sky-400" />
+                    <AlignLeft className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
                     <span>Rata Kiri (Align Left)</span>
                   </button>
                   <button
@@ -963,9 +1147,9 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
                       alignSelectedItems("center");
                       onClose();
                     }}
-                    className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300"
+                    className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
                   >
-                    <AlignCenter className="h-3.5 w-3.5 text-sky-400" />
+                    <AlignCenter className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
                     <span>Rata Tengah (Center)</span>
                   </button>
                   <button
@@ -974,9 +1158,9 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
                       alignSelectedItems("top");
                       onClose();
                     }}
-                    className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300"
+                    className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
                   >
-                    <AlignStartVertical className="h-3.5 w-3.5 text-sky-400" />
+                    <AlignStartVertical className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
                     <span>Rata Atas (Align Top)</span>
                   </button>
                 </div>
@@ -997,17 +1181,15 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
               <span>Delete Selected ({selectedIds.length})</span>
             </button>
           </div>
-        </>
-      )}
+          </>
+        );
+      })()}
 
       {/* EMPTY CANVAS AREA TARGET */}
       {target.kind === "canvas" && (
         <>
-          <div className="border-b border-[#e2e8f0] dark:border-slate-800/80 px-2.5 py-1.5 font-mono text-[10px] text-[#64748b] dark:text-slate-400">
-            <div className="font-semibold text-slate-200">CANVAS WORKSPACE</div>
-            <div className="text-[9px] text-slate-500">
-              X: {Math.round(target.worldPos.xMm)}mm • Y: {Math.round(target.worldPos.yMm)}mm
-            </div>
+          <div className="border-b border-[#e2e8f0] dark:border-slate-800/80 px-2.5 py-1.5 font-sans text-[10px] text-[#64748b] dark:text-slate-400">
+            <div className="font-semibold text-slate-900 dark:text-white">CANVAS WORKSPACE</div>
           </div>
 
           <div className="py-1">
@@ -1018,11 +1200,11 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
                   pasteFromClipboard();
                   onClose();
                 }}
-                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300"
+                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
               >
-                <Copy className="h-3.5 w-3.5 text-emerald-400" />
+                <Copy className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
                 <span>Paste (Ctrl+V)</span>
-                <span className="ml-auto font-mono text-[9px] text-slate-500">
+                <span className="ml-auto font-sans text-[9px] text-slate-500">
                   {clipboardItems.length} items
                 </span>
               </button>
@@ -1036,10 +1218,10 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
             >
               <button
                 type="button"
-                className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300"
+                className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
               >
                 <span className="flex items-center gap-2">
-                  <Plus className="h-3.5 w-3.5 text-sky-400" />
+                  <Plus className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
                   <span>Quick Add Here</span>
                 </span>
                 <ChevronRight className="h-3 w-3 text-slate-500" />
@@ -1053,7 +1235,7 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
                       addRail(target.worldPos);
                       onClose();
                     }}
-                    className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300"
+                    className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
                   >
                     <span className="h-2 w-2 rounded-full bg-amber-400" />
                     <span>DIN Rail 35mm</span>
@@ -1064,7 +1246,7 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
                       addDuct("horizontal", target.worldPos);
                       onClose();
                     }}
-                    className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300"
+                    className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
                   >
                     <span className="h-2 w-2 rounded-full bg-slate-400" />
                     <span>Wire Duct (H)</span>
@@ -1075,7 +1257,7 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
                       addDuct("vertical", target.worldPos);
                       onClose();
                     }}
-                    className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300"
+                    className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
                   >
                     <span className="h-2 w-2 rounded-full bg-slate-400" />
                     <span>Wire Duct (V)</span>
@@ -1087,7 +1269,7 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
                       addComponent("mcb-1p", undefined, target.worldPos);
                       onClose();
                     }}
-                    className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300"
+                    className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
                   >
                     <span className="h-2 w-2 rounded-full bg-sky-500" />
                     <span>MCB 1P</span>
@@ -1098,7 +1280,7 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
                       addComponent("mcb-3p", undefined, target.worldPos);
                       onClose();
                     }}
-                    className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300"
+                    className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
                   >
                     <span className="h-2 w-2 rounded-full bg-red-500" />
                     <span>MCB 3P</span>
@@ -1109,7 +1291,7 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
                       addComponent("contactor", undefined, target.worldPos);
                       onClose();
                     }}
-                    className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300"
+                    className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
                   >
                     <span className="h-2 w-2 rounded-full bg-cyan-400" />
                     <span>Contactor KM1</span>
@@ -1120,7 +1302,7 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
                       addComponent("terminal-block", undefined, target.worldPos);
                       onClose();
                     }}
-                    className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300"
+                    className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
                   >
                     <span className="h-2 w-2 rounded-full bg-emerald-400" />
                     <span>Terminal Block</span>
@@ -1137,9 +1319,9 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
                   onFitToScreen();
                   onClose();
                 }}
-                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300"
+                className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
               >
-                <Maximize2 className="h-3.5 w-3.5 text-sky-400" />
+                <Maximize2 className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
                 <span>Fit to Screen / Reset View</span>
               </button>
             )}
@@ -1152,9 +1334,9 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
                 autoRouteAllWires();
                 onClose();
               }}
-              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300 disabled:opacity-40"
+              className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white disabled:opacity-40"
             >
-              <Network className="h-3.5 w-3.5 text-sky-500" />
+              <Network className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
               <span>Auto-Route All Wires</span>
             </button>
 
@@ -1166,7 +1348,7 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
             >
               <button
                 type="button"
-                className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-sky-600/20 hover:text-[#0284c7] dark:hover:text-sky-300"
+                className="flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
               >
                 <span className="flex items-center gap-2">
                   <Sliders className="h-3.5 w-3.5 text-slate-400" />
@@ -1185,10 +1367,10 @@ export function ContextMenu({ menu, onClose, onFitToScreen }: ContextMenuProps) 
                         setGridSnapMm(val);
                         onClose();
                       }}
-                      className={`flex w-full items-center justify-between rounded px-2 py-1 text-left font-mono text-[11px] ${
+                      className={`flex w-full items-center justify-between rounded px-2 py-1 text-left font-sans text-[11px] ${
                         gridSnapMm === val
-                          ? "bg-sky-600/30 font-bold text-sky-300"
-                          : "text-slate-200 hover:bg-sky-600/20 hover:text-sky-300"
+                          ? "bg-slate-900 text-white dark:bg-white dark:text-black font-semibold"
+                          : "text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/10 hover:text-slate-900 dark:hover:text-white"
                       }`}
                     >
                       <span>{val} mm</span>

@@ -1,9 +1,289 @@
 import type { CustomCadAsset, DinRail, PlacedComponent, WireDuct } from "@/types/panel";
-import { rotateLocalPoint } from "./snap";
+import { getRotatedDimensions, rotateLocalPoint } from "./snap";
 
 export interface WirePoint {
   x: number;
   y: number;
+}
+
+export type PinExitDirection = "up" | "down" | "left" | "right";
+
+export interface WireObstacleBox {
+  id: string;
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+}
+
+export interface PinExitInfo {
+  xMm: number;
+  yMm: number;
+  exitDir: PinExitDirection;
+  stubPt: WirePoint;
+  ownerId: string;
+}
+
+export interface DuctRouteOptions {
+  startExitDir?: PinExitDirection;
+  endExitDir?: PinExitDirection;
+  startStubPt?: WirePoint;
+  endStubPt?: WirePoint;
+  obstacles?: WireObstacleBox[];
+}
+
+export function buildComponentObstacles(
+  components: PlacedComponent[],
+  cadAssets: CustomCadAsset[]
+): WireObstacleBox[] {
+  const out: WireObstacleBox[] = [];
+  const inset = 1.5;
+  for (const c of components) {
+    if (c.mountingType === "door_cutout") continue;
+    const dims = getRotatedDimensions(c.widthMm, c.heightMm, c.rotationDeg ?? 0);
+    out.push({
+      id: c.id,
+      minX: c.xMm - dims.widthMm / 2 + inset,
+      maxX: c.xMm + dims.widthMm / 2 - inset,
+      minY: c.yMm - dims.heightMm / 2 + inset,
+      maxY: c.yMm + dims.heightMm / 2 - inset,
+    });
+  }
+  for (const a of cadAssets) {
+    const dims = getRotatedDimensions(
+      a.boundingBoxMm.w,
+      a.boundingBoxMm.h,
+      a.rotationDeg ?? 0
+    );
+    out.push({
+      id: a.id,
+      minX: a.xMm - dims.widthMm / 2 + inset,
+      maxX: a.xMm + dims.widthMm / 2 - inset,
+      minY: a.yMm - dims.heightMm / 2 + inset,
+      maxY: a.yMm + dims.heightMm / 2 - inset,
+    });
+  }
+  return out;
+}
+
+export function resolvePinExitInfo(
+  components: PlacedComponent[],
+  cadAssets: CustomCadAsset[],
+  componentId: string,
+  pinId: string
+): PinExitInfo | null {
+  const stubMargin = 5;
+  const comp = components.find((c) => c.id === componentId);
+  if (comp) {
+    const pin = comp.pins.find((p) => p.id === pinId);
+    if (!pin) return null;
+    const rot = comp.rotationDeg ?? 0;
+    const rotated = rotateLocalPoint(pin.localXMm, pin.localYMm, rot);
+    const dims = getRotatedDimensions(comp.widthMm, comp.heightMm, rot);
+    const xMm = Number((comp.xMm + rotated.xMm).toFixed(2));
+    const yMm = Number((comp.yMm + rotated.yMm).toFixed(2));
+
+    let exitDir: PinExitDirection;
+    let stubPt: WirePoint;
+    if (Math.abs(rotated.yMm) >= Math.abs(rotated.xMm)) {
+      if (rotated.yMm >= 0) {
+        exitDir = "up";
+        stubPt = { x: xMm, y: Number((comp.yMm + dims.heightMm / 2 + stubMargin).toFixed(2)) };
+      } else {
+        exitDir = "down";
+        stubPt = { x: xMm, y: Number((comp.yMm - dims.heightMm / 2 - stubMargin).toFixed(2)) };
+      }
+    } else if (rotated.xMm >= 0) {
+      exitDir = "right";
+      stubPt = { x: Number((comp.xMm + dims.widthMm / 2 + stubMargin).toFixed(2)), y: yMm };
+    } else {
+      exitDir = "left";
+      stubPt = { x: Number((comp.xMm - dims.widthMm / 2 - stubMargin).toFixed(2)), y: yMm };
+    }
+
+    return { xMm, yMm, exitDir, stubPt, ownerId: comp.id };
+  }
+
+  const asset = cadAssets.find((a) => a.id === componentId);
+  if (asset) {
+    const pin = asset.pins.find((p) => p.id === pinId);
+    if (!pin) return null;
+    const rot = asset.rotationDeg ?? 0;
+    const rotated = rotateLocalPoint(pin.localXMm, pin.localYMm, rot);
+    const dims = getRotatedDimensions(asset.boundingBoxMm.w, asset.boundingBoxMm.h, rot);
+    const xMm = Number((asset.xMm + rotated.xMm).toFixed(2));
+    const yMm = Number((asset.yMm + rotated.yMm).toFixed(2));
+
+    let exitDir: PinExitDirection;
+    let stubPt: WirePoint;
+    if (Math.abs(rotated.yMm) >= Math.abs(rotated.xMm)) {
+      if (rotated.yMm >= 0) {
+        exitDir = "up";
+        stubPt = { x: xMm, y: Number((asset.yMm + dims.heightMm / 2 + stubMargin).toFixed(2)) };
+      } else {
+        exitDir = "down";
+        stubPt = { x: xMm, y: Number((asset.yMm - dims.heightMm / 2 - stubMargin).toFixed(2)) };
+      }
+    } else if (rotated.xMm >= 0) {
+      exitDir = "right";
+      stubPt = { x: Number((asset.xMm + dims.widthMm / 2 + stubMargin).toFixed(2)), y: yMm };
+    } else {
+      exitDir = "left";
+      stubPt = { x: Number((asset.xMm - dims.widthMm / 2 - stubMargin).toFixed(2)), y: yMm };
+    }
+
+    return { xMm, yMm, exitDir, stubPt, ownerId: asset.id };
+  }
+
+  return null;
+}
+
+function verticalSegmentHitsObstacle(
+  x: number,
+  y1: number,
+  y2: number,
+  obstacles: WireObstacleBox[]
+): WireObstacleBox | null {
+  const loY = Math.min(y1, y2);
+  const hiY = Math.max(y1, y2);
+  if (hiY - loY < 0.5) return null;
+  for (const obs of obstacles) {
+    if (x > obs.minX && x < obs.maxX && hiY > obs.minY && loY < obs.maxY) {
+      return obs;
+    }
+  }
+  return null;
+}
+
+function horizontalSegmentHitsObstacle(
+  y: number,
+  x1: number,
+  x2: number,
+  obstacles: WireObstacleBox[]
+): WireObstacleBox | null {
+  const loX = Math.min(x1, x2);
+  const hiX = Math.max(x1, x2);
+  if (hiX - loX < 0.5) return null;
+  for (const obs of obstacles) {
+    if (y > obs.minY && y < obs.maxY && hiX > obs.minX && loX < obs.maxX) {
+      return obs;
+    }
+  }
+  return null;
+}
+
+/**
+ * Finds the nearest X coordinate that allows a vertical run from y1 to y2
+ * without intersecting any component obstacle.
+ */
+function findClearVerticalX(
+  desiredX: number,
+  y1: number,
+  y2: number,
+  obstacles: WireObstacleBox[],
+  minXBound = -Infinity,
+  maxXBound = Infinity
+): number {
+  if (!verticalSegmentHitsObstacle(desiredX, y1, y2, obstacles)) {
+    return desiredX;
+  }
+
+  const clearance = 6;
+  const candidates: number[] = [];
+  for (const obs of obstacles) {
+    const leftX = obs.minX - clearance;
+    const rightX = obs.maxX + clearance;
+    if (leftX >= minXBound && leftX <= maxXBound) candidates.push(leftX);
+    if (rightX >= minXBound && rightX <= maxXBound) candidates.push(rightX);
+  }
+
+  candidates.sort((a, b) => Math.abs(a - desiredX) - Math.abs(b - desiredX));
+  // First pass: require BOTH the vertical channel AND the horizontal step at y1 to be clear
+  for (const cx of candidates) {
+    if (
+      !verticalSegmentHitsObstacle(cx, y1, y2, obstacles) &&
+      !horizontalSegmentHitsObstacle(y1, desiredX, cx, obstacles)
+    ) {
+      return Number(cx.toFixed(2));
+    }
+  }
+  // Second pass: at minimum ensure the vertical channel is clear of component bodies
+  for (const cx of candidates) {
+    if (!verticalSegmentHitsObstacle(cx, y1, y2, obstacles)) {
+      return Number(cx.toFixed(2));
+    }
+  }
+  return desiredX;
+}
+
+/**
+ * Picks the best entry/exit duct for a pin stub, preferring ducts on the pin's
+ * natural exit side and penalizing paths that would cross through a component body.
+ */
+function pickBestDuctForPin(
+  stubPt: WirePoint,
+  exitDir: PinExitDirection | undefined,
+  ducts: WireDuct[],
+  obstacles: WireObstacleBox[]
+): { duct: WireDuct; proj: { x: number; y: number; dist: number } } {
+  let bestDuct = ducts[0];
+  let bestProj = projectPointToDuctCenterline(stubPt, ducts[0]);
+  let bestScore = Infinity;
+
+  for (const d of ducts) {
+    const proj = projectPointToDuctCenterline(stubPt, d);
+    let score = proj.dist;
+
+    if (exitDir === "up") {
+      if (d.orientation === "horizontal" && d.yMm >= stubPt.y - 2) {
+        // Ideal: horizontal duct directly above a top pin
+        score *= 0.85;
+      } else if (d.orientation === "horizontal" && d.yMm < stubPt.y - 2) {
+        // Opposite side of component
+        score += 220;
+      } else if (d.orientation === "vertical") {
+        // Prefer horizontal duct above over side vertical duct unless very close
+        score += 45;
+      }
+    } else if (exitDir === "down") {
+      if (d.orientation === "horizontal" && d.yMm <= stubPt.y + 2) {
+        // Ideal: horizontal duct directly below a bottom pin
+        score *= 0.85;
+      } else if (d.orientation === "horizontal" && d.yMm > stubPt.y + 2) {
+        // Opposite side of component
+        score += 220;
+      } else if (d.orientation === "vertical") {
+        score += 45;
+      }
+    } else if (exitDir === "left") {
+      if (d.orientation === "vertical" && d.xMm <= stubPt.x + 2) score *= 0.85;
+      else if (d.orientation === "vertical" && d.xMm > stubPt.x + 2) score += 220;
+    } else if (exitDir === "right") {
+      if (d.orientation === "vertical" && d.xMm >= stubPt.x - 2) score *= 0.85;
+      else if (d.orientation === "vertical" && d.xMm < stubPt.x - 2) score += 220;
+    }
+
+    // Penalize if the direct orthogonal entry into this duct hits a component body
+    if (obstacles.length > 0) {
+      if (d.orientation === "horizontal") {
+        if (verticalSegmentHitsObstacle(proj.x, stubPt.y, proj.y, obstacles)) {
+          score += 140;
+        }
+      } else {
+        if (horizontalSegmentHitsObstacle(proj.y, stubPt.x, proj.x, obstacles)) {
+          score += 140;
+        }
+      }
+    }
+
+    if (score < bestScore) {
+      bestScore = score;
+      bestDuct = d;
+      bestProj = proj;
+    }
+  }
+
+  return { duct: bestDuct, proj: bestProj };
 }
 
 export function resolvePinWorldPoint(
@@ -158,13 +438,14 @@ function getDuctsIntersection(d1: WireDuct, d2: WireDuct): WirePoint | null {
   const crossX = vDuct.xMm;
   const crossY = hDuct.yMm;
 
-  // Margin check to allow T-junctions or touching boundaries
-  const margin = 10;
+  // Account for duct half-widths/half-heights so edge-touching or nearby T-junctions always connect
+  const marginX = vDuct.widthMm / 2 + 15;
+  const marginY = hDuct.heightMm / 2 + 15;
   if (
-    crossX >= hMinX - margin &&
-    crossX <= hMaxX + margin &&
-    crossY >= vMinY - margin &&
-    crossY <= vMaxY + margin
+    crossX >= hMinX - marginX &&
+    crossX <= hMaxX + marginX &&
+    crossY >= vMinY - marginY &&
+    crossY <= vMaxY + marginY
   ) {
     return { x: crossX, y: crossY };
   }
@@ -443,53 +724,73 @@ export function routeWireThroughDucts(
   endPt: WirePoint,
   ducts: WireDuct[] = [],
   rails: DinRail[] = [],
-  offsetIndex = 0
+  offsetIndex = 0,
+  options?: DuctRouteOptions
 ): WirePoint[] {
   // If no ducts present, fallback to standard orthogonal routing
   if (!ducts || ducts.length === 0) {
     return routeOrthogonalWire(startPt, endPt, "horizontal-first");
   }
 
+  const obstacles = options?.obstacles ?? [];
+  const startStub = options?.startStubPt ?? startPt;
+  const endStub = options?.endStubPt ?? endPt;
+
   // Calculate lane offset (capped to max +/- 12mm to stay comfortably within 40-60mm ducts)
   const laneOffset = Math.max(-12, Math.min(12, calculateBundleLaneOffsetMm(offsetIndex, 2.5)));
 
-  // Find nearest entry duct for startPt
-  let bestStartDuct: WireDuct = ducts[0];
-  let minStartDist = Infinity;
-  let startProj = { x: startPt.x, y: startPt.y };
+  // Pick nearest direction-aware & obstacle-aware entry/exit ducts
+  const startChoice = pickBestDuctForPin(startStub, options?.startExitDir, ducts, obstacles);
+  const endChoice = pickBestDuctForPin(endStub, options?.endExitDir, ducts, obstacles);
 
-  for (const d of ducts) {
-    const proj = projectPointToDuctCenterline(startPt, d);
-    if (proj.dist < minStartDist) {
-      minStartDist = proj.dist;
-      bestStartDuct = d;
-      startProj = { x: proj.x, y: proj.y };
-    }
-  }
+  const bestStartDuct = startChoice.duct;
+  const bestEndDuct = endChoice.duct;
+  let startProj = { x: startChoice.proj.x, y: startChoice.proj.y };
+  let endProj = { x: endChoice.proj.x, y: endChoice.proj.y };
 
-  // Find nearest exit duct for endPt
-  let bestEndDuct: WireDuct = ducts[0];
-  let minEndDist = Infinity;
-  let endProj = { x: endPt.x, y: endPt.y };
-
-  for (const d of ducts) {
-    const proj = projectPointToDuctCenterline(endPt, d);
-    if (proj.dist < minEndDist) {
-      minEndDist = proj.dist;
-      bestEndDuct = d;
-      endProj = { x: proj.x, y: proj.y };
-    }
-  }
-
-  // If entry and exit ducts are too far (> 600mm) or virtually isolated, standard orthogonal
-  if (minStartDist > 800 || minEndDist > 800) {
+  // If entry and exit ducts are too far (> 800mm), standard orthogonal
+  if (startChoice.proj.dist > 800 || endChoice.proj.dist > 800) {
     return routeOrthogonalWire(startPt, endPt, "horizontal-first");
   }
 
-  // Step 1: Orthogonal entry from startPt into startDuct centerline
-  // If duct is horizontal: move vertical to duct.yMm (+ offset), then along duct
-  // If duct is vertical: move horizontal to duct.xMm (+ offset), then along duct
+  // Ensure vertical entry/exit into horizontal ducts avoids cutting through any component body
+  if (obstacles.length > 0 && bestStartDuct.orientation === "horizontal") {
+    const halfW = bestStartDuct.widthMm / 2;
+    const clearX = findClearVerticalX(
+      startProj.x,
+      startStub.y,
+      bestStartDuct.yMm + laneOffset,
+      obstacles,
+      bestStartDuct.xMm - halfW,
+      bestStartDuct.xMm + halfW
+    );
+    startProj = { x: clearX, y: bestStartDuct.yMm };
+  }
+  if (obstacles.length > 0 && bestEndDuct.orientation === "horizontal") {
+    const halfW = bestEndDuct.widthMm / 2;
+    const clearX = findClearVerticalX(
+      endProj.x,
+      endStub.y,
+      bestEndDuct.yMm + laneOffset,
+      obstacles,
+      bestEndDuct.xMm - halfW,
+      bestEndDuct.xMm + halfW
+    );
+    endProj = { x: clearX, y: bestEndDuct.yMm };
+  }
+
+  // Step 1: Exit start pin straight out to stubPt (clears its own component body)
   const rawWaypoints: WirePoint[] = [{ x: startPt.x, y: startPt.y }];
+  if (Math.hypot(startStub.x - startPt.x, startStub.y - startPt.y) > 0.1) {
+    rawWaypoints.push({ x: startStub.x, y: startStub.y });
+  }
+  // If we shifted horizontally around an obstacle before entering a horizontal duct
+  if (
+    bestStartDuct.orientation === "horizontal" &&
+    Math.abs(startProj.x - startStub.x) > 0.1
+  ) {
+    rawWaypoints.push({ x: startProj.x, y: startStub.y });
+  }
 
   const ductPath = findShortestDuctPath(
     startProj,
@@ -502,8 +803,10 @@ export function routeWireThroughDucts(
   // Apply lane bundle offset along inside duct segments
   for (let i = 0; i < ductPath.length; i++) {
     const pt = ductPath[i];
-    // Find which duct this waypoint resides in to apply offset perpendicular to duct orientation
-    const parentDuct = ducts.find((d) => isPointInDuct(pt.x, pt.y, d, 8)) || bestStartDuct;
+    const parentDuct =
+      (i === 0 ? bestStartDuct : i === ductPath.length - 1 ? bestEndDuct : null) ||
+      ducts.find((d) => isPointInDuct(pt.x, pt.y, d, 8)) ||
+      bestStartDuct;
     if (parentDuct.orientation === "horizontal") {
       rawWaypoints.push({
         x: pt.x,
@@ -517,18 +820,38 @@ export function routeWireThroughDucts(
     }
   }
 
-  // Orthogonal exit to endPt
+  // Exit from destination duct to endStub, then straight into endPt
+  if (
+    bestEndDuct.orientation === "horizontal" &&
+    Math.abs(endProj.x - endStub.x) > 0.1
+  ) {
+    rawWaypoints.push({ x: endProj.x, y: endStub.y });
+  }
+  if (Math.hypot(endStub.x - endPt.x, endStub.y - endPt.y) > 0.1) {
+    rawWaypoints.push({ x: endStub.x, y: endStub.y });
+  }
   rawWaypoints.push({ x: endPt.x, y: endPt.y });
 
-  // Ensure every segment is orthogonal (dx === 0 or dy === 0)
+  // Ensure every segment is strictly orthogonal (dx === 0 or dy === 0)
   const orthogonalWaypoints: WirePoint[] = [rawWaypoints[0]];
   for (let i = 0; i < rawWaypoints.length - 1; i++) {
     const a = orthogonalWaypoints[orthogonalWaypoints.length - 1];
     const b = rawWaypoints[i + 1];
 
     if (Math.abs(a.x - b.x) > 0.001 && Math.abs(a.y - b.y) > 0.001) {
-      // Add right-angle corner between them
-      orthogonalWaypoints.push({ x: b.x, y: a.y });
+      // Pick the corner that doesn't cut through a component obstacle
+      const horizFirstCorner = { x: b.x, y: a.y };
+      const vertFirstCorner = { x: a.x, y: b.y };
+      const horizHits =
+        obstacles.length > 0 &&
+        (Boolean(horizontalSegmentHitsObstacle(a.y, a.x, b.x, obstacles)) ||
+          Boolean(verticalSegmentHitsObstacle(b.x, a.y, b.y, obstacles)));
+      const vertHits =
+        obstacles.length > 0 &&
+        (Boolean(verticalSegmentHitsObstacle(a.x, a.y, b.y, obstacles)) ||
+          Boolean(horizontalSegmentHitsObstacle(b.y, a.x, b.x, obstacles)));
+
+      orthogonalWaypoints.push(horizHits && !vertHits ? vertFirstCorner : horizFirstCorner);
     }
     orthogonalWaypoints.push(b);
   }

@@ -4,211 +4,552 @@ import { Html } from "@react-three/drei";
 import type { ThreeEvent } from "@react-three/fiber";
 import { useRef, useState } from "react";
 import * as THREE from "three";
+import { COMPONENT_CATALOG } from "@/lib/components-catalog";
 import { usePanelStore } from "@/store/usePanelStore";
 import type { PlacedComponent } from "@/types/panel";
 
 const BACKPLATE_PLANE = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
 
+const DOOR_CONTROLS_3D = new Set([
+  "pilot-lamp-red",
+  "pilot-lamp-green",
+  "pilot-lamp-yellow",
+  "push-button",
+  "e-stop",
+  "selector-3pos",
+  "cam-lock",
+  "cooling-fan-120",
+  "panel-meter-96",
+]);
+
+const ROUND_DOOR_3D = new Set([
+  "pilot-lamp-red",
+  "pilot-lamp-green",
+  "pilot-lamp-yellow",
+  "push-button",
+  "e-stop",
+  "selector-3pos",
+  "cam-lock",
+]);
+
+function TerminalScrews3D({ comp }: { comp: PlacedComponent }) {
+  if (DOOR_CONTROLS_3D.has(comp.templateId) || comp.pins.length === 0) {
+    return null;
+  }
+  const frontZ = comp.depthMm / 2;
+  const r = comp.widthMm < 12 ? 1.3 : comp.widthMm < 24 ? 1.7 : 2.1;
+
+  return (
+    <group>
+      {comp.pins.map((pin) => (
+        <group
+          key={`screw3d-${pin.id}`}
+          position={[pin.localXMm, pin.localYMm, Math.min(frontZ - 0.5, pin.localZMm)]}
+        >
+          <mesh rotation={[Math.PI / 2, 0, 0]}>
+            <cylinderGeometry args={[r + 0.45, r + 0.45, 1.2, 12]} />
+            <meshStandardMaterial color="#334155" roughness={0.65} />
+          </mesh>
+          <mesh position={[0, 0, 0.5]} rotation={[Math.PI / 2, 0, 0]}>
+            <cylinderGeometry args={[r * 0.78, r * 0.78, 1.0, 14]} />
+            <meshStandardMaterial color="#cbd5e1" metalness={0.75} roughness={0.25} />
+          </mesh>
+        </group>
+      ))}
+    </group>
+  );
+}
+
+/**
+ * Clean Full Monochrome CAD 3D procedural details for all 29 components.
+ */
 function ComponentDetail3D({ comp }: { comp: PlacedComponent }) {
   const id = comp.templateId;
-  const frontZ = comp.depthMm / 2;
+  const w = comp.widthMm;
+  const h = comp.heightMm;
+  const d = comp.depthMm;
+  const frontZ = d / 2;
 
+  // ── MCB 1P–4P (Stepped Acti9 DIN profile) ─────────────────────────────────
   if (id === "mcb-1p" || id === "mcb-2p" || id === "mcb-3p" || id === "mcb-4p") {
     const poles = id === "mcb-1p" ? 1 : id === "mcb-2p" ? 2 : id === "mcb-3p" ? 3 : 4;
-    const poleW = comp.widthMm / poles;
+    const poleW = w / poles;
     return (
       <group>
-        {/* Toggle handle */}
-        <mesh position={[0, -2, frontZ + 3]}>
-          <boxGeometry args={[comp.widthMm * 0.78, 8, 6]} />
-          <meshStandardMaterial color={comp.accentColor} roughness={0.3} />
+        {/* Stepped front escutcheon */}
+        <mesh position={[0, 0, frontZ + 3]} castShadow>
+          <boxGeometry args={[w * 0.96, h * 0.48, 6]} />
+          <meshStandardMaterial color="#ffffff" roughness={0.38} />
         </mesh>
-        {/* Status window */}
-        <mesh position={[0, 12, frontZ + 0.5]}>
-          <boxGeometry args={[comp.widthMm * 0.5, 4, 1]} />
-          <meshStandardMaterial color="#16a34a" roughness={0.4} />
+        {/* Recessed switch bay */}
+        <mesh position={[0, -1, frontZ + 6.3]}>
+          <boxGeometry args={[w * 0.9, h * 0.28, 1.2]} />
+          <meshStandardMaterial color="#e2e8f0" roughness={0.5} />
         </mesh>
+        {/* Toggle levers + status windows */}
+        {Array.from({ length: poles }).map((_, i) => {
+          const px = -w / 2 + poleW * (i + 0.5);
+          return (
+            <group key={`mcb3d-${i}`}>
+              <mesh position={[px, 8, frontZ + 6.9]}>
+                <boxGeometry args={[poleW * 0.48, 3.2, 0.8]} />
+                <meshStandardMaterial color="#334155" roughness={0.4} />
+              </mesh>
+              <mesh position={[px, -3.5, frontZ + 9.5]} rotation={[-0.28, 0, 0]} castShadow>
+                <boxGeometry args={[poleW * 0.64, 7.5, 6.5]} />
+                <meshStandardMaterial color="#1e293b" roughness={0.32} />
+              </mesh>
+            </group>
+          );
+        })}
+        {/* Multi-pole tie bar */}
+        {poles > 1 && (
+          <mesh position={[0, -4.5, frontZ + 12.2]}>
+            <boxGeometry args={[w - poleW * 0.36, 2.8, 2.2]} />
+            <meshStandardMaterial color="#0f172a" roughness={0.3} />
+          </mesh>
+        )}
         {/* Pole dividers */}
         {Array.from({ length: poles - 1 }).map((_, i) => (
-          <mesh
-            key={i}
-            position={[-comp.widthMm / 2 + poleW * (i + 1), 0, frontZ + 0.3]}
-          >
-            <boxGeometry args={[0.8, comp.heightMm * 0.9, 1]} />
-            <meshStandardMaterial color="#64748b" />
+          <mesh key={`pdiv-${i}`} position={[-w / 2 + poleW * (i + 1), 0, frontZ + 0.4]}>
+            <boxGeometry args={[0.7, h * 0.94, 1]} />
+            <meshStandardMaterial color="#94a3b8" />
           </mesh>
         ))}
+        <TerminalScrews3D comp={comp} />
       </group>
     );
   }
 
+  // ── MCCB 100A (ComPact NSX100 stepped molded case) ────────────────────────
   if (id === "mccb-100a") {
     return (
       <group>
-        <mesh position={[0, 6, frontZ + 4]}>
-          <boxGeometry args={[28, 22, 8]} />
-          <meshStandardMaterial color="#0f172a" roughness={0.4} />
+        <mesh position={[0, 0, frontZ + 2.5]} castShadow>
+          <boxGeometry args={[w * 0.88, h * 0.68, 5]} />
+          <meshStandardMaterial color="#f1f5f9" roughness={0.42} />
         </mesh>
-        <mesh position={[0, 10, frontZ + 10]}>
-          <boxGeometry args={[20, 10, 8]} />
-          <meshStandardMaterial color={comp.accentColor} roughness={0.3} />
+        <mesh position={[0, 4, frontZ + 6]}>
+          <boxGeometry args={[34, 38, 4]} />
+          <meshStandardMaterial color="#cbd5e1" roughness={0.45} />
         </mesh>
-        <mesh position={[18, -16, frontZ + 1]}>
+        <mesh position={[0, 7, frontZ + 11]} rotation={[-0.22, 0, 0]} castShadow>
+          <boxGeometry args={[24, 11, 10]} />
+          <meshStandardMaterial color="#1e293b" roughness={0.32} />
+        </mesh>
+        {/* Trip Test Button */}
+        <mesh position={[26, -14, frontZ + 5.5]} rotation={[Math.PI / 2, 0, 0]}>
           <cylinderGeometry args={[3.5, 3.5, 2, 16]} />
-          <meshStandardMaterial color="#facc15" />
+          <meshStandardMaterial color="#334155" roughness={0.4} />
         </mesh>
+        {/* Top & Bottom Metallic Busbar Lugs */}
+        {[-35, 0, 35].map((lx, idx) => (
+          <group key={`mlug-${idx}`}>
+            <mesh position={[lx, h / 2 - 8, frontZ - 2]}>
+              <boxGeometry args={[16, 14, 4]} />
+              <meshStandardMaterial color="#cbd5e1" metalness={0.75} roughness={0.28} />
+            </mesh>
+            <mesh position={[lx, -h / 2 + 8, frontZ - 2]}>
+              <boxGeometry args={[16, 14, 4]} />
+              <meshStandardMaterial color="#cbd5e1" metalness={0.75} roughness={0.28} />
+            </mesh>
+          </group>
+        ))}
+        <TerminalScrews3D comp={comp} />
       </group>
     );
   }
 
+  // ── SPD 3P+N & Fuse 1P ────────────────────────────────────────────────────
+  if (id === "spd-3pn" || id === "fuse-1p") {
+    const poles = id === "spd-3pn" ? 4 : 1;
+    const poleW = w / poles;
+    return (
+      <group>
+        {Array.from({ length: poles }).map((_, i) => {
+          const px = -w / 2 + poleW * (i + 0.5);
+          return (
+            <group key={`cart-${i}`}>
+              <mesh position={[px, 0, frontZ + 2.5]} castShadow>
+                <boxGeometry args={[poleW * 0.82, h * 0.56, 5]} />
+                <meshStandardMaterial color="#ffffff" roughness={0.4} />
+              </mesh>
+              <mesh position={[px, 11, frontZ + 5.3]}>
+                <boxGeometry args={[poleW * 0.45, 4.5, 0.8]} />
+                <meshStandardMaterial color="#334155" />
+              </mesh>
+            </group>
+          );
+        })}
+        <TerminalScrews3D comp={comp} />
+      </group>
+    );
+  }
+
+  // ── AC Contactor (Clean stepped TeSys LC1D09 procedural 3D) ───────────────
+  if (id === "contactor") {
+    return (
+      <group>
+        {/* Upper & Lower Aux Terminal Tiers */}
+        <mesh position={[0, 19, frontZ + 2]} castShadow>
+          <boxGeometry args={[w * 0.94, 11, 4]} />
+          <meshStandardMaterial color="#f1f5f9" roughness={0.45} />
+        </mesh>
+        <mesh position={[0, -19, frontZ + 2]} castShadow>
+          <boxGeometry args={[w * 0.94, 11, 4]} />
+          <meshStandardMaterial color="#f1f5f9" roughness={0.45} />
+        </mesh>
+        {/* Central Raised Arc Chamber */}
+        <mesh position={[0, 0, frontZ + 5.5]} castShadow>
+          <boxGeometry args={[w * 0.88, 26, 9]} />
+          <meshStandardMaterial color="#ffffff" roughness={0.38} />
+        </mesh>
+        {/* Mechanical Status Plunger */}
+        <mesh position={[0, 0, frontZ + 10.4]}>
+          <boxGeometry args={[14, 7.5, 1.4]} />
+          <meshStandardMaterial color="#cbd5e1" roughness={0.45} />
+        </mesh>
+        <mesh position={[0, 0, frontZ + 11.4]}>
+          <boxGeometry args={[8, 4, 1.2]} />
+          <meshStandardMaterial color="#1e293b" roughness={0.35} />
+        </mesh>
+        <TerminalScrews3D comp={comp} />
+      </group>
+    );
+  }
+
+  // ── Thermal Overload Relay (Clean TeSys LRD10 procedural 3D) ──────────────
+  if (id === "tor") {
+    return (
+      <group>
+        {/* 3 Metallic Plug-In Prongs extending upward into Contactor */}
+        {[-13, 0, 13].map((pxOff, idx) => (
+          <mesh key={`prong3d-${idx}`} position={[pxOff, h / 2 + 4.5, frontZ - 14]}>
+            <cylinderGeometry args={[1.35, 1.35, 10, 12]} />
+            <meshStandardMaterial color="#cbd5e1" metalness={0.78} roughness={0.24} />
+          </mesh>
+        ))}
+        {/* Upper Control Block */}
+        <mesh position={[0, 14, frontZ + 3]} castShadow>
+          <boxGeometry args={[w * 0.92, 30, 6]} />
+          <meshStandardMaterial color="#ffffff" roughness={0.4} />
+        </mesh>
+        {/* Ampere Setting Dial */}
+        <mesh position={[-10, 14, frontZ + 6.8]} rotation={[Math.PI / 2, 0, 0]}>
+          <cylinderGeometry args={[6, 6, 2, 18]} />
+          <meshStandardMaterial color="#e2e8f0" roughness={0.35} />
+        </mesh>
+        {/* RESET & STOP Buttons */}
+        <mesh position={[12, 21, frontZ + 7]}>
+          <boxGeometry args={[7, 6, 2.5]} />
+          <meshStandardMaterial color="#cbd5e1" roughness={0.38} />
+        </mesh>
+        <mesh position={[12, 9, frontZ + 7]}>
+          <boxGeometry args={[7, 6, 2.5]} />
+          <meshStandardMaterial color="#334155" roughness={0.38} />
+        </mesh>
+        <TerminalScrews3D comp={comp} />
+      </group>
+    );
+  }
+
+  // ── Relay & Timer Relay ───────────────────────────────────────────────────
+  if (id === "relay" || id === "timer-relay") {
+    return (
+      <group>
+        <mesh position={[0, 0, frontZ + 2]} castShadow>
+          <boxGeometry args={[w * 0.84, h * 0.56, 4]} />
+          <meshStandardMaterial
+            color="#ffffff"
+            transparent={id === "relay"}
+            opacity={id === "relay" ? 0.72 : 1}
+            roughness={0.25}
+          />
+        </mesh>
+        {id === "timer-relay" ? (
+          <>
+            <mesh position={[0, 8, frontZ + 4.5]} rotation={[Math.PI / 2, 0, 0]}>
+              <cylinderGeometry args={[4.5, 4.5, 1.4, 18]} />
+              <meshStandardMaterial color="#e2e8f0" roughness={0.35} />
+            </mesh>
+            <mesh position={[0, -5, frontZ + 4.5]} rotation={[Math.PI / 2, 0, 0]}>
+              <cylinderGeometry args={[4.5, 4.5, 1.4, 18]} />
+              <meshStandardMaterial color="#e2e8f0" roughness={0.35} />
+            </mesh>
+          </>
+        ) : (
+          <mesh position={[0, 2, frontZ + 1.4]}>
+            <boxGeometry args={[w * 0.44, 14, 2.4]} />
+            <meshStandardMaterial color="#64748b" metalness={0.55} roughness={0.35} />
+          </mesh>
+        )}
+        <TerminalScrews3D comp={comp} />
+      </group>
+    );
+  }
+
+  // ── PLC Compact CPU (Siemens S7-1200 stepped profile) ─────────────────────
   if (id === "plc-compact") {
     return (
       <group>
-        <mesh position={[0, 0, frontZ + 0.8]}>
-          <boxGeometry args={[comp.widthMm * 0.9, comp.heightMm * 0.55, 2]} />
+        {/* Top & Bottom Dark Terminal Covers */}
+        <mesh position={[0, h / 2 - 7, frontZ + 1]}>
+          <boxGeometry args={[w * 0.96, 12, 2]} />
+          <meshStandardMaterial color="#334155" roughness={0.5} />
+        </mesh>
+        <mesh position={[0, -h / 2 + 7, frontZ + 1]}>
+          <boxGeometry args={[w * 0.96, 12, 2]} />
+          <meshStandardMaterial color="#334155" roughness={0.5} />
+        </mesh>
+        {/* Central Faceplate */}
+        <mesh position={[0, 0, frontZ + 2]} castShadow>
+          <boxGeometry args={[w * 0.94, h * 0.64, 4]} />
+          <meshStandardMaterial color="#f1f5f9" roughness={0.42} />
+        </mesh>
+        {/* LED Bank */}
+        <mesh position={[0, 20, frontZ + 4.3]}>
+          <boxGeometry args={[w * 0.84, 9, 1]} />
+          <meshStandardMaterial color="#1e293b" roughness={0.45} />
+        </mesh>
+        {/* RJ45 Port */}
+        <mesh position={[w * 0.3, -4, frontZ + 4.3]}>
+          <boxGeometry args={[14, 16, 1.2]} />
           <meshStandardMaterial color="#0f172a" roughness={0.5} />
         </mesh>
-        {[-12, -4, 4].map((xOff, idx) => (
-          <mesh key={idx} position={[xOff, 14, frontZ + 2]}>
-            <boxGeometry args={[4, 4, 1.5]} />
-            <meshStandardMaterial
-              color={idx === 0 ? "#22c55e" : idx === 1 ? "#f59e0b" : "#38bdf8"}
-              emissive={idx === 0 ? "#22c55e" : "#000000"}
-              emissiveIntensity={0.4}
-            />
-          </mesh>
-        ))}
-        <mesh position={[0, -18, frontZ + 1.5]}>
-          <boxGeometry args={[comp.widthMm * 0.85, 5, 1.5]} />
-          <meshStandardMaterial color={comp.accentColor} />
-        </mesh>
+        <TerminalScrews3D comp={comp} />
       </group>
     );
   }
 
+  // ── VFD 1.5kW (ATV320 Compact with rear heatsink + front keypad) ──────────
   if (id === "vfd-15kw") {
     return (
       <group>
-        <mesh position={[0, 36, frontZ + 1.5]}>
-          <boxGeometry args={[comp.widthMm * 0.72, 46, 3]} />
-          <meshStandardMaterial color="#0f172a" roughness={0.4} />
+        {/* Rear Extruded Aluminum Heatsink Fins */}
+        {Array.from({ length: 7 }).map((_, i) => {
+          const fx = -w * 0.4 + i * ((w * 0.8) / 6);
+          return (
+            <mesh key={`hfin-${i}`} position={[fx, 0, -frontZ + 14]}>
+              <boxGeometry args={[2.5, h * 0.96, 26]} />
+              <meshStandardMaterial color="#94a3b8" metalness={0.65} roughness={0.35} />
+            </mesh>
+          );
+        })}
+        {/* Front Operator Keypad */}
+        <mesh position={[0, 24, frontZ + 2]} castShadow>
+          <boxGeometry args={[w * 0.82, 56, 4]} />
+          <meshStandardMaterial color="#1e293b" roughness={0.42} />
         </mesh>
-        <mesh position={[0, 44, frontZ + 3.2]}>
-          <boxGeometry args={[36, 16, 1]} />
-          <meshStandardMaterial color="#ef4444" emissive="#7f1d1d" emissiveIntensity={0.5} />
+        {/* 7-Segment Display */}
+        <mesh position={[0, 38, frontZ + 4.3]}>
+          <boxGeometry args={[w * 0.64, 16, 1]} />
+          <meshStandardMaterial color="#0f172a" roughness={0.3} />
         </mesh>
-        <mesh position={[0, -32, frontZ + 0.8]}>
-          <boxGeometry args={[comp.widthMm * 0.8, 52, 1.5]} />
-          <meshStandardMaterial color="#334155" />
+        {/* Jog Dial */}
+        <mesh position={[-18, 12, frontZ + 5.2]} rotation={[Math.PI / 2, 0, 0]}>
+          <cylinderGeometry args={[8.5, 9, 3, 20]} />
+          <meshStandardMaterial color="#475569" roughness={0.35} />
         </mesh>
+        {/* Lower Louvers */}
+        {[-16, -26, -36, -46].map((ly, idx) => (
+          <mesh key={`vl3d-${idx}`} position={[0, ly, frontZ + 0.8]}>
+            <boxGeometry args={[w * 0.78, 4, 1.2]} />
+            <meshStandardMaterial color="#64748b" />
+          </mesh>
+        ))}
+        <TerminalScrews3D comp={comp} />
       </group>
     );
   }
 
+  // ── PSU 24V 5A / 10A (Mean Well NDR slim metallic enclosure) ──────────────
   if (id === "psu-24v" || id === "psu-24v-10a") {
     return (
       <group>
-        <mesh position={[0, 8, frontZ + 0.8]}>
-          <boxGeometry args={[comp.widthMm * 0.8, comp.heightMm * 0.5, 1.5]} />
-          <meshStandardMaterial color="#0f172a" roughness={0.6} />
+        <mesh position={[0, 2, frontZ + 0.8]}>
+          <boxGeometry args={[w * 0.84, h * 0.62, 1.6]} />
+          <meshStandardMaterial color="#cbd5e1" metalness={0.45} roughness={0.45} />
         </mesh>
-        <mesh position={[comp.widthMm * 0.25, -24, frontZ + 1.5]}>
-          <cylinderGeometry args={[3, 3, 2, 16]} />
-          <meshStandardMaterial color={comp.accentColor} emissive={comp.accentColor} emissiveIntensity={0.35} />
+        {/* V-ADJ Trimmer */}
+        <mesh position={[w * 0.24, -h * 0.34, frontZ + 1.5]} rotation={[Math.PI / 2, 0, 0]}>
+          <cylinderGeometry args={[2.6, 2.6, 1.8, 16]} />
+          <meshStandardMaterial color="#f8fafc" metalness={0.5} roughness={0.3} />
         </mesh>
+        <TerminalScrews3D comp={comp} />
       </group>
     );
   }
 
-  if (id === "pilot-lamp-red" || id === "pilot-lamp-green") {
+  // ── Distribution Block 4P ─────────────────────────────────────────────────
+  if (id === "dist-block-4p") {
     return (
       <group>
-        <mesh position={[0, 0, frontZ + 3]} rotation={[Math.PI / 2, 0, 0]}>
-          <cylinderGeometry args={[12, 13, 6, 24]} />
-          <meshStandardMaterial color="#0f172a" metalness={0.4} roughness={0.3} />
+        {[-18, -6, 6, 18].map((by, idx) => (
+          <mesh key={`db3d-${idx}`} position={[0, by, frontZ + 1.5]}>
+            <boxGeometry args={[w * 0.78, 5, 2.4]} />
+            <meshStandardMaterial color="#94a3b8" metalness={0.75} roughness={0.28} />
+          </mesh>
+        ))}
+        {/* Translucent Polycarbonate Cover */}
+        <mesh position={[0, 0, frontZ + 3.2]}>
+          <boxGeometry args={[w * 0.88, h * 0.64, 1.6]} />
+          <meshStandardMaterial color="#f8fafc" transparent opacity={0.35} roughness={0.2} />
         </mesh>
-        <mesh position={[0, 0, frontZ + 7]} rotation={[Math.PI / 2, 0, 0]}>
-          <cylinderGeometry args={[9.5, 10, 4, 24]} />
-          <meshStandardMaterial
-            color={comp.accentColor}
-            emissive={comp.accentColor}
-            emissiveIntensity={0.45}
-            roughness={0.2}
-          />
-        </mesh>
+        <TerminalScrews3D comp={comp} />
       </group>
     );
   }
 
-  if (id === "push-button" || id === "e-stop" || id === "selector-3pos") {
-    const capRadius = id === "e-stop" ? 16 : 11;
+  // ── Terminal Blocks & End Clamp ───────────────────────────────────────────
+  if (id === "terminal-block" || id === "terminal-n" || id === "terminal-pe" || id === "end-clamp") {
     return (
       <group>
-        <mesh position={[0, 0, frontZ + 3]} rotation={[Math.PI / 2, 0, 0]}>
-          <cylinderGeometry args={[13, 14, 5, 24]} />
-          <meshStandardMaterial color="#0f172a" metalness={0.3} roughness={0.4} />
+        <mesh position={[0, 0, frontZ + 1.4]}>
+          <boxGeometry args={[w * 0.86, 12, 2.8]} />
+          <meshStandardMaterial color="#ffffff" roughness={0.4} />
         </mesh>
+        <TerminalScrews3D comp={comp} />
+      </group>
+    );
+  }
+
+  // ── Door Controls: Round Pilot Lamps, Push Button, E-Stop, Selector, Cam Lock ──
+  if (ROUND_DOOR_3D.has(id)) {
+    const outerR = Math.min(w, h) * 0.48;
+    return (
+      <group>
+        {/* Rear Contact Block / Body behind door */}
+        <mesh position={[0, 0, -d * 0.25]}>
+          <boxGeometry args={[Math.min(w, 28), Math.min(h, 30), d * 0.5]} />
+          <meshStandardMaterial color="#334155" roughness={0.5} />
+        </mesh>
+        {/* Metallic Mounting Bezel */}
+        <mesh position={[0, 0, 3]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+          <cylinderGeometry args={[outerR, outerR * 1.04, 5, 24]} />
+          <meshStandardMaterial color="#cbd5e1" metalness={0.7} roughness={0.25} />
+        </mesh>
+        {/* Actuator Cap */}
         {id === "selector-3pos" ? (
-          <mesh position={[0, 0, frontZ + 8]} rotation={[0, 0, 0.35]}>
-            <boxGeometry args={[6, 20, 8]} />
-            <meshStandardMaterial color="#e2e8f0" roughness={0.3} />
+          <mesh position={[0, 0, 8.5]} rotation={[0, 0, 0.38]} castShadow>
+            <boxGeometry args={[5, outerR * 1.5, 7]} />
+            <meshStandardMaterial color="#1e293b" roughness={0.35} />
+          </mesh>
+        ) : id === "e-stop" ? (
+          <mesh position={[0, 0, 10]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+            <cylinderGeometry args={[outerR * 0.82, outerR * 0.72, 10, 24]} />
+            <meshStandardMaterial color="#1e293b" roughness={0.32} />
+          </mesh>
+        ) : id === "cam-lock" ? (
+          <mesh position={[0, 0, 6.2]} rotation={[Math.PI / 2, 0, 0]}>
+            <cylinderGeometry args={[outerR * 0.65, outerR * 0.65, 2.4, 20]} />
+            <meshStandardMaterial color="#94a3b8" metalness={0.8} roughness={0.25} />
           </mesh>
         ) : (
-          <mesh position={[0, 0, frontZ + 8]} rotation={[Math.PI / 2, 0, 0]}>
-            <cylinderGeometry args={[capRadius, capRadius * 0.9, 7, 24]} />
-            <meshStandardMaterial color={comp.accentColor} roughness={0.3} />
+          <mesh position={[0, 0, 7.2]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+            <cylinderGeometry args={[outerR * 0.72, outerR * 0.76, 4.5, 24]} />
+            <meshStandardMaterial color="#f8fafc" roughness={0.28} />
           </mesh>
         )}
       </group>
     );
   }
 
+  // ── Panel Meter 96×96 ─────────────────────────────────────────────────────
   if (id === "panel-meter-96") {
     return (
       <group>
-        <mesh position={[0, 0, frontZ + 1.5]}>
-          <boxGeometry args={[86, 86, 3]} />
-          <meshStandardMaterial color="#0f172a" roughness={0.4} />
+        <mesh position={[0, 0, frontZ + 1.8]} castShadow>
+          <boxGeometry args={[w * 0.94, h * 0.94, 3.5]} />
+          <meshStandardMaterial color="#1e293b" roughness={0.4} />
         </mesh>
-        <mesh position={[0, 6, frontZ + 3.2]}>
-          <boxGeometry args={[68, 44, 1]} />
-          <meshStandardMaterial color="#0284c7" emissive="#0369a1" emissiveIntensity={0.35} />
+        <mesh position={[0, 10, frontZ + 3.8]}>
+          <boxGeometry args={[w * 0.76, h * 0.46, 1]} />
+          <meshStandardMaterial color="#0f172a" roughness={0.25} />
         </mesh>
+        {[-24, -8, 8, 24].map((bx, idx) => (
+          <mesh key={`mb3d-${idx}`} position={[bx, -28, frontZ + 3.9]}>
+            <boxGeometry args={[10, 6.5, 1.5]} />
+            <meshStandardMaterial color="#cbd5e1" roughness={0.35} />
+          </mesh>
+        ))}
       </group>
     );
   }
 
+  // ── Cooling Fan 120mm ─────────────────────────────────────────────────────
   if (id === "cooling-fan-120") {
     return (
       <group>
-        <mesh position={[0, 0, frontZ + 1.5]}>
-          <boxGeometry args={[112, 112, 3]} />
-          <meshStandardMaterial color="#475569" roughness={0.5} />
+        <mesh position={[0, 0, frontZ + 1.5]} castShadow>
+          <boxGeometry args={[w * 0.95, h * 0.95, 3]} />
+          <meshStandardMaterial color="#cbd5e1" roughness={0.45} />
         </mesh>
         <mesh position={[0, 0, frontZ + 3.2]} rotation={[Math.PI / 2, 0, 0]}>
-          <cylinderGeometry args={[48, 48, 2, 24]} />
-          <meshStandardMaterial color="#1e293b" roughness={0.6} />
+          <cylinderGeometry args={[w * 0.4, w * 0.4, 2, 24]} />
+          <meshStandardMaterial color="#334155" roughness={0.55} />
+        </mesh>
+        {Array.from({ length: 7 }).map((_, i) => {
+          const angle = (i * Math.PI * 2) / 7;
+          return (
+            <mesh
+              key={`blade3d-${i}`}
+              position={[Math.cos(angle) * 26, Math.sin(angle) * 26, frontZ + 4.3]}
+              rotation={[0.35, 0, angle]}
+            >
+              <boxGeometry args={[32, 9, 1.2]} />
+              <meshStandardMaterial color="#94a3b8" roughness={0.42} />
+            </mesh>
+          );
+        })}
+        <mesh position={[0, 0, frontZ + 5]} rotation={[Math.PI / 2, 0, 0]}>
+          <cylinderGeometry args={[12, 12, 2.5, 20]} />
+          <meshStandardMaterial color="#1e293b" roughness={0.4} />
         </mesh>
       </group>
     );
   }
 
+  return <TerminalScrews3D comp={comp} />;
+}
+
+function ClearanceBox3D({ comp }: { comp: PlacedComponent }) {
+  const cl = COMPONENT_CATALOG[comp.templateId]?.behavior?.clearanceMm;
+  if (!cl) return null;
+  const top = cl.top ?? 0;
+  const bottom = cl.bottom ?? 0;
+
   return (
-    <mesh position={[0, 0, frontZ + 1]}>
-      <boxGeometry args={[comp.widthMm * 0.72, Math.min(14, comp.heightMm * 0.35), 4]} />
-      <meshStandardMaterial color={comp.accentColor} roughness={0.35} />
-    </mesh>
+    <group>
+      {top > 0 && (
+        <mesh position={[0, comp.heightMm / 2 + top / 2, 0]}>
+          <boxGeometry args={[comp.widthMm, top, comp.depthMm]} />
+          <meshBasicMaterial color="#64748b" wireframe transparent opacity={0.45} />
+        </mesh>
+      )}
+      {bottom > 0 && (
+        <mesh position={[0, -comp.heightMm / 2 - bottom / 2, 0]}>
+          <boxGeometry args={[comp.widthMm, bottom, comp.depthMm]} />
+          <meshBasicMaterial color="#64748b" wireframe transparent opacity={0.45} />
+        </mesh>
+      )}
+    </group>
   );
 }
 
 function ComponentItem3D({
   comp,
   isSelected,
+  showPinLabels,
+  doorFrontZ,
+  doorMode,
   onDragChange,
   onContextMenu,
 }: {
   comp: PlacedComponent;
   isSelected: boolean;
+  showPinLabels: boolean;
+  doorFrontZ: number;
+  doorMode: "open" | "transparent" | "hidden";
   onDragChange: (dragging: boolean) => void;
   onContextMenu: (e: ThreeEvent<MouseEvent>) => void;
 }) {
@@ -253,61 +594,92 @@ function ComponentItem3D({
   };
 
   const rotRad = ((comp.rotationDeg ?? 0) * Math.PI) / 180;
+  const isRoundDoor = ROUND_DOOR_3D.has(comp.templateId);
+  const isDoorComp = comp.mountingType === "door_cutout" || DOOR_CONTROLS_3D.has(comp.templateId);
+
+  // Position door-mounted components flush on the front door plane when door is closed/transparent
+  const effectiveZ =
+    isDoorComp && doorMode === "transparent"
+      ? isRoundDoor
+        ? doorFrontZ
+        : doorFrontZ - comp.depthMm / 2
+      : comp.zMm;
 
   return (
     <group
-      position={[comp.xMm, comp.yMm, comp.zMm]}
+      position={[comp.xMm, comp.yMm, effectiveZ]}
       rotation={[0, 0, -rotRad]}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onContextMenu={onContextMenu}
     >
-      {/* Main body */}
-      <mesh castShadow receiveShadow>
-        <boxGeometry args={[comp.widthMm, comp.heightMm, comp.depthMm]} />
-        <meshStandardMaterial
-          color={comp.color}
-          roughness={0.45}
-          metalness={0.15}
-        />
-      </mesh>
+      {/* Main rectangular body (skipped for round door devices which build their own cylindrical body) */}
+      {!isRoundDoor && (
+        <mesh castShadow receiveShadow>
+          <boxGeometry args={[comp.widthMm, comp.heightMm, comp.depthMm]} />
+          <meshStandardMaterial
+            color={comp.color || "#f8fafc"}
+            roughness={0.42}
+            metalness={0.12}
+          />
+        </mesh>
+      )}
 
       {/* Selection wireframe highlight */}
       {isSelected && (
         <mesh>
-          <boxGeometry
-            args={[comp.widthMm + 2, comp.heightMm + 2, comp.depthMm + 2]}
-          />
-          <meshBasicMaterial color="#38bdf8" wireframe />
+          <boxGeometry args={[comp.widthMm + 2, comp.heightMm + 2, comp.depthMm + 2]} />
+          <meshBasicMaterial color="#0284c7" wireframe />
         </mesh>
       )}
 
-      {/* Proportional 3D Component Detail */}
+      {/* Clearance Zone Wireframe when selected */}
+      {isSelected && <ClearanceBox3D comp={comp} />}
+
+      {/* Clean Monochrome 3D Hardware Details */}
       <ComponentDetail3D comp={comp} />
 
-      {/* Pin Terminals */}
+      {/* Clean Readable 3D Component Tag Badge */}
+      <Html
+        center
+        distanceFactor={520}
+        position={[0, comp.heightMm / 2 + 8, comp.depthMm / 2 + 4]}
+        style={{ pointerEvents: "none" }}
+      >
+        <div
+          className={`rounded px-1.5 py-0.5 font-sans text-[10px] font-semibold tracking-tight whitespace-nowrap shadow-xs border ${
+            isSelected
+              ? "bg-sky-600 text-white border-sky-400"
+              : "bg-white/92 text-slate-900 border-slate-300 dark:bg-slate-900/90 dark:text-slate-100 dark:border-slate-600"
+          }`}
+        >
+          {comp.name}
+        </div>
+      </Html>
+
+      {/* Pin Terminals (labels shown cleanly only when selected or showPinLabels is enabled) */}
       {comp.pins.map((pin) => (
         <group
           key={pin.id}
           position={[pin.localXMm, pin.localYMm, pin.localZMm]}
         >
           <mesh>
-            <cylinderGeometry args={[2.2, 2.2, 4, 12]} />
+            <cylinderGeometry args={[1.8, 1.8, 3.2, 12]} />
             <meshStandardMaterial
-              color="#f59e0b"
-              metalness={0.85}
-              roughness={0.2}
+              color="#94a3b8"
+              metalness={0.8}
+              roughness={0.22}
             />
           </mesh>
-          {isSelected && (
+          {(isSelected || showPinLabels) && (
             <Html
               center
-              distanceFactor={600}
-              position={[0, 0, 8]}
+              distanceFactor={520}
+              position={[0, pin.localYMm >= 0 ? 4 : -4, 8]}
               style={{ pointerEvents: "none" }}
             >
-              <span className="rounded bg-slate-950/90 px-1 py-0.5 font-mono text-[9px] font-semibold text-amber-300 border border-amber-500/40 whitespace-nowrap">
+              <span className="rounded bg-slate-900/90 px-1 py-0.5 font-mono text-[8.5px] font-semibold text-slate-100 border border-slate-500/50 whitespace-nowrap">
                 {pin.label}
               </span>
             </Html>
@@ -323,10 +695,18 @@ export function Components3D({
   onContextMenu,
 }: {
   onDragChange: (dragging: boolean) => void;
-  onContextMenu?: (e: ThreeEvent<MouseEvent>, target: import("@/components/ui/ContextMenu").ContextMenuTarget) => void;
+  onContextMenu?: (
+    e: ThreeEvent<MouseEvent>,
+    target: import("@/components/ui/ContextMenu").ContextMenuTarget
+  ) => void;
 }) {
   const components = usePanelStore((s) => s.components);
   const selected = usePanelStore((s) => s.selected);
+  const enclosure = usePanelStore((s) => s.enclosure);
+  const showPinLabels = usePanelStore((s) => s.showPinLabels);
+
+  const zBack = -enclosure.backplateThicknessMm - 18;
+  const doorFrontZ = zBack + enclosure.depthMm;
 
   return (
     <group>
@@ -334,9 +714,10 @@ export function Components3D({
         <ComponentItem3D
           key={comp.id}
           comp={comp}
-          isSelected={
-            selected?.kind === "component" && selected.id === comp.id
-          }
+          isSelected={selected?.kind === "component" && selected.id === comp.id}
+          showPinLabels={showPinLabels}
+          doorFrontZ={doorFrontZ}
+          doorMode={enclosure.doorMode}
           onDragChange={onDragChange}
           onContextMenu={(e) => {
             if (onContextMenu) {

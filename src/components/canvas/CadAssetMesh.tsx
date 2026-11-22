@@ -195,7 +195,7 @@ export function CadAssetMesh({ asset }: { asset: CustomCadAsset }) {
           </mesh>
           {isSelected && (
             <Html distanceFactor={600} center>
-              <div className="px-1 py-0.5 rounded bg-zinc-950/90 border border-amber-500/60 text-amber-300 text-[9px] font-mono pointer-events-none whitespace-nowrap">
+              <div className="px-1 py-0.5 rounded bg-zinc-950/90 border border-amber-500/60 text-amber-300 text-[9px] font-sans pointer-events-none whitespace-nowrap">
                 {pin.label}
               </div>
             </Html>

@@ -159,6 +159,34 @@ export function PanelViewport() {
   const redo = usePanelStore((s) => s.redo);
   const canUndo = usePanelStore((s) => s.canUndo);
   const canRedo = usePanelStore((s) => s.canRedo);
+  const selected = usePanelStore((s) => s.selected);
+  const selectedIds = usePanelStore((s) => s.selectedIds);
+  const copySelectedToClipboard = usePanelStore((s) => s.copySelectedToClipboard);
+  const pasteFromClipboard = usePanelStore((s) => s.pasteFromClipboard);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const isEditingText =
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        Boolean(target?.isContentEditable);
+      if (isEditingText) return;
+      const mod = e.ctrlKey || e.metaKey;
+      if (mod && !e.shiftKey && e.key.toLowerCase() === "c") {
+        if (selectedIds.length > 0 || selected) {
+          e.preventDefault();
+          copySelectedToClipboard();
+        }
+      } else if (mod && !e.shiftKey && e.key.toLowerCase() === "v") {
+        e.preventDefault();
+        pasteFromClipboard();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [selected, selectedIds, copySelectedToClipboard, pasteFromClipboard]);
 
   const { widthMm: plateW, heightMm: plateH } = useMemo(
     () => getBackplateDimensions(enclosure, plateConfig),
@@ -263,8 +291,8 @@ export function PanelViewport() {
         />
       </Canvas>
 
-      {/* Top Floating Pill Toolbar (3D Controls) */}
-      <div className="absolute top-3 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-[#e2e8f0] dark:border-white/10 bg-white/95 dark:bg-[#171a21]/95 px-2.5 py-1 shadow-sm dark:shadow-xl backdrop-blur-xl">
+      {/* Top-Left Floating Island Toolbar (RelayTest SubToolbar style) */}
+      <div className="absolute top-4 left-4 z-20 flex items-center gap-1.5 rounded-2xl border border-slate-200/90 dark:border-white/15 bg-white/85 dark:bg-[#11141c]/80 px-2.5 py-1.5 shadow-2xl shadow-slate-900/15 dark:shadow-black/60 backdrop-blur-md">
         {/* Undo / Redo */}
         <div className="flex items-center gap-0.5">
           <button
@@ -310,7 +338,7 @@ export function PanelViewport() {
         <div className="h-4 w-px bg-[#e2e8f0] dark:bg-white/10" />
 
         {/* Grid Snap */}
-        <div className="flex items-center gap-0.5 font-mono text-[10px]">
+        <div className="flex items-center gap-0.5 font-sans text-[10px]">
           {snaps.map((snap) => (
             <button
               key={snap}
@@ -329,7 +357,7 @@ export function PanelViewport() {
       </div>
 
       {/* Bottom Left Status Pill */}
-      <div className="pointer-events-none absolute bottom-3 left-3 z-20 flex items-center gap-2 rounded-full border border-[#e2e8f0] dark:border-white/10 bg-white/95 dark:bg-[#171a21]/95 px-3 py-1 font-mono text-[11px] tabular-nums text-[#0f172a] dark:text-slate-300 shadow-sm dark:shadow-lg backdrop-blur-xl">
+      <div className="pointer-events-none absolute bottom-3 left-3 z-20 flex items-center gap-2 rounded-full border border-[#e2e8f0] dark:border-white/10 bg-white/95 dark:bg-[#171a21]/95 px-3 py-1 font-sans text-[11px] tabular-nums text-[#0f172a] dark:text-slate-300 shadow-sm dark:shadow-lg backdrop-blur-xl">
         <span>
           ENCLOSURE: {formatDim(enclosure.widthMm, displayUnit)} ×{" "}
           {formatDim(enclosure.heightMm, displayUnit)} ×{" "}
@@ -342,13 +370,13 @@ export function PanelViewport() {
       </div>
 
       {isPinMarkingMode && (
-        <div className="pointer-events-none absolute bottom-12 left-1/2 z-20 -translate-x-1/2 rounded-full border border-amber-500/50 bg-amber-50/95 dark:bg-amber-950/90 px-3 py-1 font-mono text-[11px] font-semibold text-amber-700 dark:text-amber-300 shadow-lg">
+        <div className="pointer-events-none absolute bottom-12 left-1/2 z-20 -translate-x-1/2 rounded-full border border-amber-500/50 bg-amber-50/95 dark:bg-amber-950/90 px-3 py-1 font-sans text-[11px] font-semibold text-amber-700 dark:text-amber-300 shadow-lg">
           PIN MARKER ACTIVE — CLICK MESH SURFACE TO PLACE PIN
         </div>
       )}
 
       {/* Bottom Right Status Pill */}
-      <div className="pointer-events-none absolute bottom-3 right-3 z-20 flex items-center gap-2 rounded-full border border-[#e2e8f0] dark:border-white/10 bg-white/95 dark:bg-[#171a21]/95 px-3 py-1 font-mono text-[11px] tabular-nums text-[#0f172a] dark:text-slate-300 shadow-sm dark:shadow-lg backdrop-blur-xl">
+      <div className="pointer-events-none absolute bottom-3 right-3 z-20 flex items-center gap-2 rounded-full border border-[#e2e8f0] dark:border-white/10 bg-white/95 dark:bg-[#171a21]/95 px-3 py-1 font-sans text-[11px] tabular-nums text-[#0f172a] dark:text-slate-300 shadow-sm dark:shadow-lg backdrop-blur-xl">
         <span>Parts: {components.length + cadAssets.length}</span>
         <span className="text-[#cbd5e1] dark:text-white/20">|</span>
         <span>Wires: {wires.length}</span>

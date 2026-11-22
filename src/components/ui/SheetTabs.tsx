@@ -11,6 +11,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { usePanelStore } from "@/store/usePanelStore";
+import { DropdownItem } from "@/components/ui";
 import type { SheetType } from "@/types/panel";
 
 export function SheetTabs() {
@@ -60,16 +61,16 @@ export function SheetTabs() {
   const getSheetIcon = (type: SheetType) => {
     switch (type) {
       case "door-cutout":
-        return <FileSpreadsheet className="h-4 w-4 text-amber-500 dark:text-amber-400" />;
+        return <FileSpreadsheet className="h-4 w-4 text-slate-600 dark:text-zinc-400" />;
       case "schematic":
-        return <FileCode2 className="h-4 w-4 text-emerald-500 dark:text-emerald-400" />;
+        return <FileCode2 className="h-4 w-4 text-slate-600 dark:text-zinc-400" />;
       default:
         return <FileCheck2 className="h-4 w-4 text-[#64748b] dark:text-slate-300" />;
     }
   };
 
   return (
-    <div className="relative flex h-10 w-full select-none items-center justify-between border-t border-[#e2e8f0] dark:border-white/10 bg-[#f8fafc] dark:bg-[#0c0e14] px-3 text-xs">
+    <div className="relative flex h-9 shrink-0 w-full select-none items-center justify-between border-t border-slate-200 dark:border-white/10 bg-white dark:bg-[#11141c] px-2.5 text-xs">
       <div className="flex min-w-0 flex-1 items-center gap-2">
         <div className="flex min-w-0 items-center space-x-1.5 overflow-x-auto no-scrollbar py-1">
           {sheets.map((sheet) => {
@@ -99,7 +100,7 @@ export function SheetTabs() {
                     if (e.key === "Enter") finishRename();
                     if (e.key === "Escape") setEditingSheetId(null);
                   }}
-                  className="rounded bg-white dark:bg-[#090b10] px-1.5 py-0.5 font-mono text-xs text-[#0f172a] dark:text-white outline-none ring-1 ring-[#0f172a]/30 dark:ring-white/30"
+                  className="rounded bg-white dark:bg-[#090b10] px-1.5 py-0.5 font-sans text-xs text-[#0f172a] dark:text-white outline-none ring-1 ring-[#0f172a]/30 dark:ring-white/30"
                 />
               ) : (
                 <span
@@ -166,49 +167,43 @@ export function SheetTabs() {
           </button>
 
           {showTypeMenu && (
-            <div className="absolute bottom-10 right-0 sm:right-auto sm:left-0 z-50 w-56 rounded-xl border border-[#e2e8f0] dark:border-white/10 bg-white/98 dark:bg-[#111318]/98 p-1 shadow-xl dark:shadow-2xl backdrop-blur-xl text-xs">
-              <button
-                type="button"
+            <div className="absolute bottom-10 right-0 sm:right-auto sm:left-0 z-50 w-56 rounded-xl border border-[#e2e8f0] dark:border-white/15 bg-white dark:bg-[#161a23] p-1 shadow-2xl text-xs">
+              <DropdownItem
+                icon={<FileCheck2 className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />}
                 onClick={() => {
                   const newId = addSheet("mounting-plate");
                   setActiveSheet(newId);
                   setShowTypeMenu(false);
                 }}
-                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-white/10 hover:text-[#0f172a] dark:hover:text-white"
               >
-                <FileCheck2 className="h-3.5 w-3.5 text-sky-500 dark:text-sky-400" />
                 Mounting Plate (2D/3D)
-              </button>
-              <button
-                type="button"
+              </DropdownItem>
+              <DropdownItem
+                icon={<FileSpreadsheet className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />}
                 onClick={() => {
                   const newId = addSheet("door-cutout");
                   setActiveSheet(newId);
                   setShowTypeMenu(false);
                 }}
-                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-white/10 hover:text-[#0f172a] dark:hover:text-white"
               >
-                <FileSpreadsheet className="h-3.5 w-3.5 text-amber-500 dark:text-amber-400" />
                 Door Cutout Layout
-              </button>
-              <button
-                type="button"
+              </DropdownItem>
+              <DropdownItem
+                icon={<FileCode2 className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />}
                 onClick={() => {
                   const newId = addSheet("schematic");
                   setActiveSheet(newId);
                   setShowTypeMenu(false);
                 }}
-                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-white/10 hover:text-[#0f172a] dark:hover:text-white"
               >
-                <FileCode2 className="h-3.5 w-3.5 text-emerald-500 dark:text-emerald-400" />
                 Schematic Diagram
-              </button>
+              </DropdownItem>
             </div>
           )}
         </div>
       </div>
 
-      <div className="hidden font-mono text-[11px] tabular-nums text-[#64748b] dark:text-slate-500 sm:block">
+      <div className="hidden font-sans text-[11px] tabular-nums text-[#64748b] dark:text-slate-500 sm:block">
         Sheet {sheets.findIndex((s) => s.id === activeSheetId) + 1} of{" "}
         {sheets.length}
       </div>

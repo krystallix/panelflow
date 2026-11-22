@@ -1,13 +1,13 @@
 "use client";
 
 import { usePanelStore } from "@/store/usePanelStore";
-import { formatDim } from "@/lib/units";
 import { generateDrillingDxf, generateDrillingSvg } from "@/lib/template-export";
 import { useState } from "react";
-import { X, Download, FileCode, Check } from "lucide-react";
+import { Download, FileCode, Check } from "lucide-react";
+import { Button, Modal, ModalBody, ModalHeader } from "@/components/ui";
 
 export function ExportModal({ onClose }: { onClose: () => void }) {
-  const { enclosure, rails, ducts, displayUnit } = usePanelStore();
+  const { enclosure, rails, ducts } = usePanelStore();
   const [copied, setCopied] = useState<"svg" | "dxf" | null>(null);
 
   const svgContent = generateDrillingSvg(enclosure, rails, ducts);
@@ -35,50 +35,35 @@ export function ExportModal({ onClose }: { onClose: () => void }) {
   const plateH = enclosure.heightMm - enclosure.backplateInsetMm * 2;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-zinc-950 border border-zinc-800 rounded-xl max-w-xl w-full p-5 space-y-4 text-xs select-none">
-        <div className="flex items-center justify-between border-b border-zinc-900 pb-3">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded bg-sky-950 border border-sky-800/60 flex items-center justify-center text-sky-400">
-              <FileCode className="w-4 h-4" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-zinc-100 text-sm">
-                2D Drilling Template (1:1 mm)
-              </h3>
-              <p className="text-[11px] text-zinc-400">
-                Mounting plate drilling guide for DIN Rails and Wire Ducts
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="text-zinc-500 hover:text-zinc-300 p-1"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
+    <Modal isOpen={true} onClose={onClose} maxWidthClassName="max-w-xl" className="text-xs">
+      <ModalHeader
+        title="2D Drilling Template (1:1 mm)"
+        subtitle="Mounting plate drilling guide for DIN Rails and Wire Ducts"
+        icon={<FileCode className="w-4 h-4 text-slate-600 dark:text-zinc-400" />}
+        onClose={onClose}
+      />
 
+      <ModalBody>
         {/* Plate stats */}
-        <div className="grid grid-cols-3 gap-2 bg-zinc-900/60 p-3 rounded-lg border border-zinc-800/80 font-mono text-[11px]">
+        <div className="grid grid-cols-3 gap-2 bg-slate-50 dark:bg-white/[0.03] p-3 rounded-xl border border-slate-200 dark:border-white/10 font-sans text-[11px]">
           <div>
-            <span className="text-zinc-500 block text-[10px]">PLATE SIZE</span>
-            <span className="text-zinc-200">
+            <span className="text-slate-500 dark:text-zinc-500 block text-[10px]">PLATE SIZE</span>
+            <span className="text-slate-900 dark:text-zinc-200">
               {plateW} × {plateH} mm
             </span>
           </div>
           <div>
-            <span className="text-zinc-500 block text-[10px]">DIN RAILS</span>
-            <span className="text-zinc-200">{rails.length} rails (5.5mm ⌀)</span>
+            <span className="text-slate-500 dark:text-zinc-500 block text-[10px]">DIN RAILS</span>
+            <span className="text-slate-900 dark:text-zinc-200">{rails.length} rails (5.5mm ⌀)</span>
           </div>
           <div>
-            <span className="text-zinc-500 block text-[10px]">WIRE DUCTS</span>
-            <span className="text-zinc-200">{ducts.length} ducts (4.5mm ⌀)</span>
+            <span className="text-slate-500 dark:text-zinc-500 block text-[10px]">WIRE DUCTS</span>
+            <span className="text-slate-900 dark:text-zinc-200">{ducts.length} ducts (4.5mm ⌀)</span>
           </div>
         </div>
 
         {/* Live SVG Preview Box */}
-        <div className="h-56 bg-zinc-900 border border-zinc-800 rounded-lg p-3 flex items-center justify-center overflow-hidden">
+        <div className="h-56 bg-slate-100 dark:bg-black/30 border border-slate-200 dark:border-white/10 rounded-xl p-3 flex items-center justify-center overflow-hidden">
           <div
             className="max-h-full max-w-full bg-white rounded shadow-sm p-2 flex items-center justify-center"
             dangerouslySetInnerHTML={{ __html: svgContent }}
@@ -86,15 +71,17 @@ export function ExportModal({ onClose }: { onClose: () => void }) {
           />
         </div>
 
-        <div className="text-[11px] text-zinc-400 flex items-center justify-between">
+        <div className="text-[11px] text-slate-500 dark:text-zinc-400 flex items-center justify-between">
           <span>Standards: EN 50022 35mm Rail pitch 25mm • Wire duct pitch 50mm</span>
-          <span className="font-mono text-zinc-500">Scale 1:1 true mm</span>
+          <span className="font-sans text-slate-400 dark:text-zinc-500">Scale 1:1 true mm</span>
         </div>
 
         {/* Export Buttons */}
         <div className="grid grid-cols-2 gap-3 pt-2">
           <div className="flex gap-2">
-            <button
+            <Button
+              variant="primary"
+              size="md"
               onClick={() =>
                 downloadFile(
                   svgContent,
@@ -102,22 +89,26 @@ export function ExportModal({ onClose }: { onClose: () => void }) {
                   "image/svg+xml"
                 )
               }
-              className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-md bg-sky-600 hover:bg-sky-500 text-white font-medium transition-colors cursor-pointer"
+              className="flex-1"
             >
               <Download className="w-3.5 h-3.5" />
               <span>Download SVG (1:1)</span>
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="outline"
+              size="md"
               onClick={() => copyToClipboard(svgContent, "svg")}
               title="Copy SVG"
-              className="px-2.5 py-2 rounded-md bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300"
+              className="px-3"
             >
-              {copied === "svg" ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : "Copy"}
-            </button>
+              {copied === "svg" ? <Check className="w-3.5 h-3.5 text-slate-600 dark:text-zinc-400" /> : "Copy"}
+            </Button>
           </div>
 
           <div className="flex gap-2">
-            <button
+            <Button
+              variant="emerald"
+              size="md"
               onClick={() =>
                 downloadFile(
                   dxfContent,
@@ -125,21 +116,23 @@ export function ExportModal({ onClose }: { onClose: () => void }) {
                   "application/dxf"
                 )
               }
-              className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white font-medium transition-colors cursor-pointer"
+              className="flex-1"
             >
               <Download className="w-3.5 h-3.5" />
               <span>Download DXF (AutoCAD)</span>
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="outline"
+              size="md"
               onClick={() => copyToClipboard(dxfContent, "dxf")}
               title="Copy DXF"
-              className="px-2.5 py-2 rounded-md bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-300"
+              className="px-3"
             >
-              {copied === "dxf" ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : "Copy"}
-            </button>
+              {copied === "dxf" ? <Check className="w-3.5 h-3.5 text-slate-600 dark:text-zinc-400" /> : "Copy"}
+            </Button>
           </div>
         </div>
-      </div>
-    </div>
+      </ModalBody>
+    </Modal>
   );
 }

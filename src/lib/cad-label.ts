@@ -202,3 +202,187 @@ export function getSmartCadLabelPosition(params: {
 
   return makePos("right");
 }
+
+export interface ComponentTagPlacement {
+  x: number;
+  y: number;
+  placement: "top" | "bottom" | "inside";
+  fontSize: number;
+  pillWidth: number;
+  pillHeight: number;
+  text: string;
+}
+
+/**
+ * Computes a clean, high-readability tag badge position for a PlacedComponent in SVG space.
+ * Avoids overlapping adjacent obstacles and keeps text legible even on narrow 6.2mm terminals.
+ */
+export function getComponentTagPlacement(params: {
+  comp: PlacedComponent;
+  x: number;
+  y: number;
+  otherBoxes: SvgRect[];
+}): ComponentTagPlacement {
+  const { comp, x, y, otherBoxes } = params;
+  const w = comp.widthMm;
+  const h = comp.heightMm;
+  const cx = x + w / 2;
+  const text = formatCadDisplayLabel(comp.name, 16);
+
+  const fontSize = w < 14 ? 3.2 : w < 30 ? 3.8 : 4.4;
+  const pillHeight = fontSize + 2.6;
+  const pillWidth = Math.max(10, text.length * fontSize * 0.62 + 4.4);
+
+  const obstacles = otherBoxes.filter((b) => b.id !== comp.id);
+
+  // Explicit override
+  if (comp.labelPosition === "bottom") {
+    return {
+      x: cx,
+      y: y + h + pillHeight / 2 + 2.5,
+      placement: "bottom",
+      fontSize,
+      pillWidth,
+      pillHeight,
+      text,
+    };
+  }
+  if (comp.labelPosition === "top") {
+    return {
+      x: cx,
+      y: y - pillHeight / 2 - 2.5,
+      placement: "top",
+      fontSize,
+      pillWidth,
+      pillHeight,
+      text,
+    };
+  }
+
+  // Try top above component first (standard IEC CAD callout)
+  const topRect = {
+    x: cx - pillWidth / 2,
+    y: y - pillHeight - 2.5,
+    w: pillWidth,
+    h: pillHeight,
+  };
+  const topOccluded = obstacles.some((b) => rectsOverlap(topRect, b));
+  if (!topOccluded) {
+    return {
+      x: cx,
+      y: y - pillHeight / 2 - 2.5,
+      placement: "top",
+      fontSize,
+      pillWidth,
+      pillHeight,
+      text,
+    };
+  }
+
+  // Fallback to bottom below component
+  const botRect = {
+    x: cx - pillWidth / 2,
+    y: y + h + 2.5,
+    w: pillWidth,
+    h: pillHeight,
+  };
+  const botOccluded = obstacles.some((b) => rectsOverlap(botRect, b));
+  if (!botOccluded) {
+    return {
+      x: cx,
+      y: y + h + pillHeight / 2 + 2.5,
+      placement: "bottom",
+      fontSize,
+      pillWidth,
+      pillHeight,
+      text,
+    };
+  }
+
+  // Final fallback: centered inside body
+  return {
+    x: cx,
+    y: y + h / 2,
+    placement: "inside",
+    fontSize: Math.min(fontSize, 3.8),
+    pillWidth,
+    pillHeight,
+    text,
+  };
+}
+
+export interface SmartPinLabelLayout {
+  x: number;
+  y: number;
+  textAnchor: "start" | "middle" | "end";
+  dominantBaseline: "auto" | "hanging" | "central";
+  fontSize: number;
+}
+
+/**
+ * Computes non-overlapping pin label placement in SVG space (Y down).
+ * Top-row pins place labels centered above/inside; bottom-row pins place labels centered below/inside;
+ * tightly spaced pins (< 11mm apart horizontally) alternate vertical offsets so labels never collide.
+ */
+export function getSmartPinLabelLayout(
+  comp: PlacedComponent,
+  pin: PlacedComponent["pins"][number],
+  pinIndex: number
+): SmartPinLabelLayout {
+  const px = comp.xMm + pin.localXMm;
+  const py = -(comp.yMm + pin.localYMm);
+
+  // Check nearest horizontal neighbor in the same row (within 6mm vertically)
+  let minHorizGap = Infinity;
+  for (let i = 0; i < comp.pins.length; i++) {
+    if (i === pinIndex) continue;
+    const other = comp.pins[i];
+    if (Math.abs(other.localYMm - pin.localYMm) <= 6) {
+      minHorizGap = Math.min(minHorizGap, Math.abs(other.localXMm - pin.localXMm));
+    }
+  }
+
+  const isTight = minHorizGap < 11 || comp.widthMm < 14;
+  const fontSize = isTight ? 2.4 : 2.9;
+  const stagger = isTight && pinIndex % 2 === 1 ? 3.2 : 0;
+
+  if (pin.localYMm > 2) {
+    // Top-side terminal: place label cleanly below the pin dot (inside terminal bay)
+    return {
+      x: px,
+      y: py + 3.4 + stagger,
+      textAnchor: "middle",
+      dominantBaseline: "hanging",
+      fontSize,
+    };
+  }
+
+  if (pin.localYMm < -2) {
+    // Bottom-side terminal: place label cleanly above the pin dot (inside terminal bay)
+    return {
+      x: px,
+      y: py - 3.4 - stagger,
+      textAnchor: "middle",
+      dominantBaseline: "auto",
+      fontSize,
+    };
+  }
+
+  // Center-row pins (e.g. Pilot Lamps X1 / X2)
+  if (pin.localXMm < 0) {
+    return {
+      x: px - 2.6,
+      y: py,
+      textAnchor: "end",
+      dominantBaseline: "central",
+      fontSize,
+    };
+  }
+  return {
+    x: px + 2.6,
+    y: py,
+    textAnchor: "start",
+    dominantBaseline: "central",
+    fontSize,
+  };
+}

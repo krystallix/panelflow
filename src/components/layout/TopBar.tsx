@@ -40,7 +40,7 @@ export function TopBar({ onOpenExport }: { onOpenExport: () => void }) {
             <Box className="w-3.5 h-3.5" />
           </div>
           <span>PanelFlow</span>
-          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-400 uppercase tracking-wider">
+          <span className="text-[10px] font-sans px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-400 uppercase tracking-wider">
             CAD Phase 1
           </span>
         </div>
@@ -48,7 +48,7 @@ export function TopBar({ onOpenExport }: { onOpenExport: () => void }) {
         <div className="h-4 w-px bg-zinc-800 mx-1" />
 
         <div className="text-zinc-400 flex items-center gap-1.5">
-          <span className="font-mono text-zinc-300">
+          <span className="font-sans text-zinc-300">
             {enclosure.widthMm} × {enclosure.heightMm} × {enclosure.depthMm} mm
           </span>
         </div>
@@ -58,12 +58,12 @@ export function TopBar({ onOpenExport }: { onOpenExport: () => void }) {
       <div className="flex items-center gap-4">
         {/* Unit Engine */}
         <div className="flex items-center gap-1.5 bg-zinc-900/80 border border-zinc-800 rounded-md p-0.5">
-          <span className="text-[11px] text-zinc-500 px-2 font-mono uppercase">Unit</span>
+          <span className="text-[11px] text-zinc-500 px-2 font-sans uppercase">Unit</span>
           {units.map((u) => (
             <button
               key={u}
               onClick={() => setDisplayUnit(u)}
-              className={`px-2.5 py-1 rounded text-[11px] font-mono transition-colors ${
+              className={`px-2.5 py-1 rounded text-[11px] font-sans transition-colors ${
                 displayUnit === u
                   ? "bg-sky-500 text-white font-medium shadow-xs"
                   : "text-zinc-400 hover:text-zinc-200"
@@ -76,14 +76,14 @@ export function TopBar({ onOpenExport }: { onOpenExport: () => void }) {
 
         {/* Snap Grid */}
         <div className="flex items-center gap-1 bg-zinc-900/80 border border-zinc-800 rounded-md p-0.5">
-          <span className="text-[11px] text-zinc-500 px-2 flex items-center gap-1 font-mono">
+          <span className="text-[11px] text-zinc-500 px-2 flex items-center gap-1 font-sans">
             <Grid3X3 className="w-3 h-3" /> Snap
           </span>
           {snaps.map((s) => (
             <button
               key={s}
               onClick={() => setGridSnapMm(s)}
-              className={`px-2 py-1 rounded text-[11px] font-mono transition-colors ${
+              className={`px-2 py-1 rounded text-[11px] font-sans transition-colors ${
                 gridSnapMm === s
                   ? "bg-zinc-700 text-zinc-100 font-medium"
                   : "text-zinc-400 hover:text-zinc-200"
@@ -96,7 +96,7 @@ export function TopBar({ onOpenExport }: { onOpenExport: () => void }) {
 
         {/* Door Mode */}
         <div className="flex items-center gap-1 bg-zinc-900/80 border border-zinc-800 rounded-md p-0.5">
-          <span className="text-[11px] text-zinc-500 px-2 font-mono">Door</span>
+          <span className="text-[11px] text-zinc-500 px-2 font-sans">Door</span>
           {doorModes.map(({ mode, label, icon }) => (
             <button
               key={mode}

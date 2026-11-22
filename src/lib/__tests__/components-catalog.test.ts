@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { COMPONENT_CATALOG, COMPONENT_LIST } from "../components-catalog";
 import type { ComponentTemplateId } from "@/types/panel";
 
-describe("expanded components-catalog", () => {
+describe("monochrome CAD components-catalog", () => {
   const expectedIds: ComponentTemplateId[] = [
     // Protection & Switchgear
     "mcb-1p",
@@ -40,34 +40,47 @@ describe("expanded components-catalog", () => {
     "cam-lock",
   ];
 
-  it("contains all required industrial standard templates", () => {
+  it("contains all 29 industrial standard templates with reference models and IEC prefixes", () => {
     expect(COMPONENT_LIST.length).toBeGreaterThanOrEqual(expectedIds.length);
     for (const id of expectedIds) {
       expect(COMPONENT_CATALOG[id]).toBeDefined();
       const tpl = COMPONENT_CATALOG[id];
       expect(tpl.id).toBe(id);
+      expect(tpl.referenceModel.length).toBeGreaterThan(2);
+      expect(tpl.tagPrefix.length).toBeGreaterThan(0);
       expect(tpl.widthMm).toBeGreaterThan(0);
       expect(tpl.heightMm).toBeGreaterThan(0);
       expect(tpl.depthMm).toBeGreaterThan(0);
       expect(Array.isArray(tpl.pins)).toBe(true);
       expect(tpl.category).toBeDefined();
+      expect(tpl.mountingType).toBeDefined();
     }
   });
 
-  it("verifies accurate dimensions for key parts", () => {
-    // MCB dimensions
-    expect(COMPONENT_CATALOG["mcb-1p"].widthMm).toBe(17.5);
-    expect(COMPONENT_CATALOG["mcb-2p"].widthMm).toBe(35);
-    expect(COMPONENT_CATALOG["mcb-3p"].widthMm).toBe(52.5);
-    expect(COMPONENT_CATALOG["mcb-4p"].widthMm).toBe(70);
+  it("verifies real datasheet dimensions and behaviors for key parts", () => {
+    // Schneider Acti9 iC60N MCB dimensions (18mm modular pitch)
+    expect(COMPONENT_CATALOG["mcb-1p"].widthMm).toBe(18);
+    expect(COMPONENT_CATALOG["mcb-2p"].widthMm).toBe(36);
+    expect(COMPONENT_CATALOG["mcb-3p"].widthMm).toBe(54);
+    expect(COMPONENT_CATALOG["mcb-4p"].widthMm).toBe(72);
+    expect(COMPONENT_CATALOG["mcb-1p"].depthMm).toBe(78.5);
+    expect(COMPONENT_CATALOG["mcb-1p"].behavior?.sideBySideSnap).toBe(true);
 
-    // MCCB 3P 100A
-    expect(COMPONENT_CATALOG["mccb-100a"].widthMm).toBe(90);
-    expect(COMPONENT_CATALOG["mccb-100a"].heightMm).toBe(155);
-    expect(COMPONENT_CATALOG["mccb-100a"].depthMm).toBe(85);
+    // Schneider ComPact NSX100 MCCB 3P 100A
+    expect(COMPONENT_CATALOG["mccb-100a"].widthMm).toBe(105);
+    expect(COMPONENT_CATALOG["mccb-100a"].heightMm).toBe(161);
+    expect(COMPONENT_CATALOG["mccb-100a"].depthMm).toBe(86);
     expect(COMPONENT_CATALOG["mccb-100a"].mountingType).toBe("screw_plate");
+    expect(COMPONENT_CATALOG["mccb-100a"].behavior?.clearanceMm?.top).toBe(30);
 
-    // PLC Compact CPU with I0.0-I0.3, Q0.0-Q0.3, +24V, 0V
+    // TeSys LC1D09 Contactor & LRD10 TOR
+    expect(COMPONENT_CATALOG.contactor.widthMm).toBe(45);
+    expect(COMPONENT_CATALOG.contactor.heightMm).toBe(77);
+    expect(COMPONENT_CATALOG.contactor.depthMm).toBe(86);
+    expect(COMPONENT_CATALOG.tor.mountingType).toBe("parent_mount");
+    expect(COMPONENT_CATALOG.tor.behavior?.mountTargetTemplateIds).toContain("contactor");
+
+    // Siemens S7-1200 CPU 1214C
     const plc = COMPONENT_CATALOG["plc-compact"];
     expect(plc.widthMm).toBe(110);
     expect(plc.heightMm).toBe(100);
@@ -78,16 +91,27 @@ describe("expanded components-catalog", () => {
     expect(pinLabels).toContain("I0.0");
     expect(pinLabels).toContain("Q0.0");
 
-    // VFD 1.5kW with L1, L2, L3, U, V, W, PE
+    // Schneider ATV320 1.5kW Compact VFD
     const vfd = COMPONENT_CATALOG["vfd-15kw"];
-    expect(vfd.widthMm).toBe(75);
-    expect(vfd.heightMm).toBe(185);
-    expect(vfd.depthMm).toBe(140);
+    expect(vfd.widthMm).toBe(105);
+    expect(vfd.heightMm).toBe(142);
+    expect(vfd.depthMm).toBe(158);
     expect(vfd.mountingType).toBe("screw_plate");
+    expect(vfd.behavior?.clearanceMm?.top).toBe(100);
+    expect(vfd.behavior?.clearanceMm?.bottom).toBe(100);
     const vfdPins = vfd.pins.map((p) => p.label);
     expect(vfdPins).toContain("L1");
     expect(vfdPins).toContain("U");
     expect(vfdPins).toContain("PE");
+
+    // Mean Well NDR-120-24 & NDR-240-24
+    expect(COMPONENT_CATALOG["psu-24v"].widthMm).toBe(40);
+    expect(COMPONENT_CATALOG["psu-24v-10a"].widthMm).toBe(63);
+
+    // Phoenix Contact UT 4 Terminal Block & CLIPFIX 35
+    expect(COMPONENT_CATALOG["terminal-block"].widthMm).toBe(6.2);
+    expect(COMPONENT_CATALOG["terminal-block"].heightMm).toBe(47.7);
+    expect(COMPONENT_CATALOG["end-clamp"].widthMm).toBe(9.5);
 
     // Door Controls
     expect(COMPONENT_CATALOG["pilot-lamp-red"].mountingType).toBe("door_cutout");

@@ -5,7 +5,16 @@ import { usePanelStore } from "@/store/usePanelStore";
 import { parseDxfToMmSegments } from "@/lib/dxf-parser";
 import { getCadScaleFactorToMm } from "@/lib/units";
 import type { CadFormat, CadImportUnit, CustomCadAsset } from "@/types/panel";
-import { Upload, X, FileCheck, Layers } from "lucide-react";
+import { AlertCircle, Upload, FileCheck } from "lucide-react";
+import {
+  Alert,
+  Button,
+  Input,
+  Modal,
+  ModalBody,
+  ModalFooter,
+  ModalHeader,
+} from "@/components/ui";
 
 export function CadUploadModal({ onClose }: { onClose: () => void }) {
   const { addCadAsset, setSelected } = usePanelStore();
@@ -96,31 +105,19 @@ export function CadUploadModal({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
-      <div className="bg-zinc-950 border border-zinc-800 rounded-xl max-w-md w-full p-5 space-y-4 text-xs select-none">
-        <div className="flex items-center justify-between border-b border-zinc-900 pb-3">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded bg-sky-950 border border-sky-800/60 flex items-center justify-center text-sky-400">
-              <Upload className="w-4 h-4" />
-            </div>
-            <div>
-              <h3 className="font-semibold text-zinc-100 text-sm">
-                Custom CAD Importer
-              </h3>
-              <p className="text-[11px] text-zinc-400">
-                Upload 3D model & normalize to canonical mm
-              </p>
-            </div>
-          </div>
-          <button onClick={onClose} className="text-zinc-500 hover:text-zinc-300 p-1">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
+    <Modal isOpen={true} onClose={onClose} maxWidthClassName="max-w-md" className="text-xs">
+      <ModalHeader
+        title="Custom CAD Importer"
+        subtitle="Upload 3D model & normalize to canonical mm"
+        icon={<Upload className="w-4 h-4 text-slate-600 dark:text-zinc-400" />}
+        onClose={onClose}
+      />
 
+      <ModalBody>
         {/* Drag & drop / browse area */}
         <div
           onClick={() => fileInputRef.current?.click()}
-          className="border-2 border-dashed border-zinc-800 hover:border-sky-500/50 bg-zinc-900/40 hover:bg-zinc-900/80 rounded-lg p-6 flex flex-col items-center justify-center gap-2 cursor-pointer transition-colors"
+          className="border-2 border-dashed border-slate-300 dark:border-white/15 hover:border-sky-500/60 bg-slate-50 dark:bg-white/[0.03] hover:bg-slate-100/80 dark:hover:bg-white/[0.06] rounded-xl p-6 flex flex-col items-center justify-center gap-2 cursor-pointer transition-colors"
         >
           <input
             ref={fileInputRef}
@@ -131,19 +128,19 @@ export function CadUploadModal({ onClose }: { onClose: () => void }) {
           />
           {selectedFile ? (
             <div className="text-center space-y-1">
-              <FileCheck className="w-8 h-8 text-emerald-400 mx-auto" />
-              <div className="font-medium text-zinc-200">{selectedFile.name}</div>
-              <div className="text-[10px] text-zinc-500 font-mono">
+              <FileCheck className="w-8 h-8 text-slate-600 dark:text-zinc-400 mx-auto" />
+              <div className="font-medium text-slate-900 dark:text-zinc-200">{selectedFile.name}</div>
+              <div className="text-[10px] text-slate-500 dark:text-zinc-500 font-sans">
                 {(selectedFile.size / 1024).toFixed(1)} KB
               </div>
             </div>
           ) : (
             <div className="text-center space-y-1">
-              <Upload className="w-8 h-8 text-zinc-500 mx-auto" />
-              <div className="font-medium text-zinc-300">
+              <Upload className="w-8 h-8 text-slate-400 dark:text-zinc-500 mx-auto" />
+              <div className="font-medium text-slate-700 dark:text-zinc-300">
                 Click or drop CAD model here
               </div>
-              <div className="text-[11px] text-zinc-500">
+              <div className="text-[11px] text-slate-500 dark:text-zinc-500">
                 Supports .glb, .gltf, .obj, .dxf
               </div>
             </div>
@@ -152,66 +149,59 @@ export function CadUploadModal({ onClose }: { onClose: () => void }) {
 
         {/* Name input */}
         <div>
-          <label className="text-[10px] text-zinc-400 font-mono block mb-1">
+          <label className="text-[10px] text-slate-500 dark:text-zinc-400 font-sans block mb-1">
             Asset Label
           </label>
-          <input
+          <Input
             type="text"
             value={assetName}
             onChange={(e) => setAssetName(e.target.value)}
             placeholder="e.g. VFD Inverter 0.75kW"
-            className="w-full bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1.5 text-zinc-100 focus:border-sky-500 focus:outline-none"
           />
         </div>
 
         {/* Source Unit Selector */}
         <div>
-          <label className="text-[10px] text-zinc-400 font-mono block mb-1">
+          <label className="text-[10px] text-slate-500 dark:text-zinc-400 font-sans block mb-1">
             Original CAD Unit Scale (Normalizes to mm)
           </label>
-          <div className="grid grid-cols-4 gap-1.5 bg-zinc-900/60 p-1 rounded border border-zinc-800">
+          <div className="grid grid-cols-4 gap-1.5 bg-slate-100 dark:bg-white/[0.03] p-1 rounded-xl border border-slate-200 dark:border-white/10">
             {units.map((u) => (
-              <button
+              <Button
                 key={u}
-                type="button"
+                variant={sourceUnit === u ? "primary" : "ghost"}
+                size="xs"
                 onClick={() => setSourceUnit(u)}
-                className={`py-1.5 rounded font-mono uppercase transition-colors ${
-                  sourceUnit === u
-                    ? "bg-sky-600 text-white font-semibold"
-                    : "text-zinc-400 hover:text-zinc-200"
-                }`}
+                className="font-sans uppercase"
               >
                 {u}
-              </button>
+              </Button>
             ))}
           </div>
-          <p className="text-[10px] text-zinc-500 mt-1">
+          <p className="text-[10px] text-slate-500 dark:text-zinc-500 mt-1">
             Factor: 1 {sourceUnit} = {getCadScaleFactorToMm(sourceUnit)} mm internal
           </p>
         </div>
 
         {errorMsg && (
-          <div className="p-2 rounded bg-red-950/50 border border-red-800/60 text-red-300 text-[11px]">
+          <Alert variant="error" icon={<AlertCircle className="w-3.5 h-3.5" />}>
             {errorMsg}
-          </div>
+          </Alert>
         )}
+      </ModalBody>
 
-        <div className="pt-2 flex justify-end gap-2 border-t border-zinc-900">
-          <button
-            onClick={onClose}
-            className="px-3 py-1.5 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-300 transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            disabled={!selectedFile || isProcessing}
-            onClick={handleImport}
-            className="px-4 py-1.5 rounded bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white font-medium transition-colors cursor-pointer"
-          >
-            {isProcessing ? "Processing..." : "Import Model"}
-          </button>
-        </div>
-      </div>
-    </div>
+      <ModalFooter>
+        <Button variant="ghost" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button
+          variant="primary"
+          disabled={!selectedFile || isProcessing}
+          onClick={handleImport}
+        >
+          {isProcessing ? "Processing..." : "Import Model"}
+        </Button>
+      </ModalFooter>
+    </Modal>
   );
 }

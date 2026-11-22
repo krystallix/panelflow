@@ -1,4 +1,12 @@
-import type { CustomCadAsset, PanelSheet } from "@/types/panel";
+import type {
+  CustomCadAsset,
+  GridSnapMm,
+  LengthUnit,
+  PanelSheet,
+  TitleBlockMeta,
+} from "@/types/panel";
+
+export const LOCAL_AUTOSAVE_KEY = "panelflow_autosave_v1";
 
 const DB_NAME = "panelflow_db";
 const DB_VERSION = 1;
@@ -57,26 +65,104 @@ function getDb(): Promise<IDBDatabase> {
 export interface AutoSaveSnapshot {
   sheets: PanelSheet[];
   activeSheetId: string;
+  displayUnit?: LengthUnit;
+  gridSnapMm?: GridSnapMm;
+  autoRouteDuctsEnabled?: boolean;
+  showPinLabels?: boolean;
+  titleBlock?: TitleBlockMeta;
   savedAt: number;
 }
 
-export async function saveAutoSaveSession(
-  sheets: PanelSheet[],
-  activeSheetId: string
-): Promise<void> {
-  const db = await getDb();
-  // Strip transient in-memory blob URLs so we don't store revoked object URLs
-  const cleanSheets: PanelSheet[] = sheets.map((sheet) => ({
+function stripTransientUrls(sheets: PanelSheet[]): PanelSheet[] {
+  return sheets.map((sheet) => ({
     ...sheet,
     cadAssets: sheet.cadAssets.map((asset) => {
       const { objectUrl: _omitted, ...rest } = asset;
       return rest;
     }),
   }));
+}
 
+export function saveLocalAutoSave(
+  sheets: PanelSheet[],
+  activeSheetId: string,
+  meta?: {
+    displayUnit?: LengthUnit;
+    gridSnapMm?: GridSnapMm;
+    autoRouteDuctsEnabled?: boolean;
+    showPinLabels?: boolean;
+    titleBlock?: TitleBlockMeta;
+  }
+): void {
+  if (typeof window === "undefined") return;
   const snapshot: AutoSaveSnapshot = {
-    sheets: cleanSheets,
+    sheets: stripTransientUrls(sheets),
     activeSheetId,
+    displayUnit: meta?.displayUnit,
+    gridSnapMm: meta?.gridSnapMm,
+    autoRouteDuctsEnabled: meta?.autoRouteDuctsEnabled,
+    showPinLabels: meta?.showPinLabels,
+    titleBlock: meta?.titleBlock,
+    savedAt: Date.now(),
+  };
+  try {
+    window.localStorage.setItem(LOCAL_AUTOSAVE_KEY, JSON.stringify(snapshot));
+  } catch {
+    // Quota exceeded (e.g. large CAD/image dataUrl): save lightweight layout without binary blobs
+    try {
+      const lightSheets = snapshot.sheets.map((s) => ({
+        ...s,
+        cadAssets: s.cadAssets.map((a) => ({
+          ...a,
+          dataUrl: undefined,
+          imageOverlayUrl: undefined,
+        })),
+      }));
+      window.localStorage.setItem(
+        LOCAL_AUTOSAVE_KEY,
+        JSON.stringify({ ...snapshot, sheets: lightSheets })
+      );
+    } catch {
+      // localStorage unavailable or full
+    }
+  }
+}
+
+export function loadLocalAutoSave(): AutoSaveSnapshot | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(LOCAL_AUTOSAVE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as AutoSaveSnapshot;
+    if (!parsed || !Array.isArray(parsed.sheets) || parsed.sheets.length === 0) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveAutoSaveSession(
+  sheets: PanelSheet[],
+  activeSheetId: string,
+  meta?: {
+    displayUnit?: LengthUnit;
+    gridSnapMm?: GridSnapMm;
+    autoRouteDuctsEnabled?: boolean;
+    showPinLabels?: boolean;
+    titleBlock?: TitleBlockMeta;
+  }
+): Promise<void> {
+  const db = await getDb();
+  const snapshot: AutoSaveSnapshot = {
+    sheets: stripTransientUrls(sheets),
+    activeSheetId,
+    displayUnit: meta?.displayUnit,
+    gridSnapMm: meta?.gridSnapMm,
+    autoRouteDuctsEnabled: meta?.autoRouteDuctsEnabled,
+    showPinLabels: meta?.showPinLabels,
+    titleBlock: meta?.titleBlock,
     savedAt: Date.now(),
   };
 
@@ -103,6 +189,13 @@ export async function loadAutoSaveSession(): Promise<AutoSaveSnapshot | null> {
 }
 
 export async function clearAutoSaveSession(): Promise<void> {
+  if (typeof window !== "undefined") {
+    try {
+      window.localStorage.removeItem(LOCAL_AUTOSAVE_KEY);
+    } catch {
+      // ignore storage error
+    }
+  }
   const db = await getDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_AUTOSAVE, "readwrite");

@@ -57,7 +57,7 @@ export function InspectorPanel() {
     <aside className="w-80 border-l border-zinc-800/80 bg-zinc-950/80 backdrop-blur-md flex flex-col h-full select-none text-xs">
       <div className="p-3 border-b border-zinc-800/80 font-semibold text-zinc-200 flex items-center justify-between">
         <span className="flex items-center gap-1.5 uppercase tracking-wider text-[11px] text-zinc-400">
-          <Sliders className="w-3.5 h-3.5 text-sky-400" />
+          <Sliders className="w-3.5 h-3.5 text-slate-600 dark:text-zinc-400" />
           Inspector & Properties
         </span>
         {selected && (
@@ -81,7 +81,7 @@ export function InspectorPanel() {
 
             <div className="grid grid-cols-3 gap-2">
               <div>
-                <label className="text-[10px] text-zinc-500 font-mono block mb-1">
+                <label className="text-[10px] text-zinc-500 font-sans block mb-1">
                   Width ({displayUnit})
                 </label>
                 <input
@@ -92,12 +92,12 @@ export function InspectorPanel() {
                       widthMm: toMm(Number(e.target.value) || 0, displayUnit),
                     })
                   }
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-zinc-100 font-mono focus:border-sky-500 focus:outline-none"
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-zinc-100 font-sans focus:border-sky-500 focus:outline-none"
                 />
               </div>
 
               <div>
-                <label className="text-[10px] text-zinc-500 font-mono block mb-1">
+                <label className="text-[10px] text-zinc-500 font-sans block mb-1">
                   Height ({displayUnit})
                 </label>
                 <input
@@ -108,12 +108,12 @@ export function InspectorPanel() {
                       heightMm: toMm(Number(e.target.value) || 0, displayUnit),
                     })
                   }
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-zinc-100 font-mono focus:border-sky-500 focus:outline-none"
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-zinc-100 font-sans focus:border-sky-500 focus:outline-none"
                 />
               </div>
 
               <div>
-                <label className="text-[10px] text-zinc-500 font-mono block mb-1">
+                <label className="text-[10px] text-zinc-500 font-sans block mb-1">
                   Depth ({displayUnit})
                 </label>
                 <input
@@ -124,7 +124,7 @@ export function InspectorPanel() {
                       depthMm: toMm(Number(e.target.value) || 0, displayUnit),
                     })
                   }
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-zinc-100 font-mono focus:border-sky-500 focus:outline-none"
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-zinc-100 font-sans focus:border-sky-500 focus:outline-none"
                 />
               </div>
             </div>
@@ -133,13 +133,13 @@ export function InspectorPanel() {
               <div className="text-[11px] text-zinc-400 font-medium">Mounting Plate</div>
               <div className="flex items-center justify-between text-zinc-500">
                 <span>Plate Inset:</span>
-                <span className="font-mono text-zinc-300">
+                <span className="font-sans text-zinc-300">
                   {formatDim(enclosure.backplateInsetMm, displayUnit)}
                 </span>
               </div>
               <div className="flex items-center justify-between text-zinc-500">
                 <span>Mounting Area:</span>
-                <span className="font-mono text-zinc-300">
+                <span className="font-sans text-zinc-300">
                   {formatDim(enclosure.widthMm - enclosure.backplateInsetMm * 2, displayUnit)} ×{" "}
                   {formatDim(enclosure.heightMm - enclosure.backplateInsetMm * 2, displayUnit)}
                 </span>
@@ -151,19 +151,19 @@ export function InspectorPanel() {
               <div className="text-[11px] text-zinc-400 font-medium">Items Overview</div>
               <div className="flex justify-between text-zinc-500">
                 <span>DIN Rails:</span>
-                <span className="font-mono text-zinc-200">{rails.length}</span>
+                <span className="font-sans text-zinc-200">{rails.length}</span>
               </div>
               <div className="flex justify-between text-zinc-500">
                 <span>Wire Ducts:</span>
-                <span className="font-mono text-zinc-200">{ducts.length}</span>
+                <span className="font-sans text-zinc-200">{ducts.length}</span>
               </div>
               <div className="flex justify-between text-zinc-500">
                 <span>Components:</span>
-                <span className="font-mono text-zinc-200">{components.length}</span>
+                <span className="font-sans text-zinc-200">{components.length}</span>
               </div>
               <div className="flex justify-between text-zinc-500">
                 <span>Custom CAD Assets:</span>
-                <span className="font-mono text-zinc-200">{cadAssets.length}</span>
+                <span className="font-sans text-zinc-200">{cadAssets.length}</span>
               </div>
             </div>
           </div>
@@ -187,7 +187,7 @@ export function InspectorPanel() {
             </div>
 
             <div>
-              <label className="text-[10px] text-zinc-500 font-mono block mb-1">
+              <label className="text-[10px] text-zinc-500 font-sans block mb-1">
                 Name
               </label>
               <input
@@ -200,7 +200,7 @@ export function InspectorPanel() {
 
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="text-[10px] text-zinc-500 font-mono block mb-1">
+                <label className="text-[10px] text-zinc-500 font-sans block mb-1">
                   Y Position ({displayUnit})
                 </label>
                 <input
@@ -211,12 +211,12 @@ export function InspectorPanel() {
                       yMm: toMm(Number(e.target.value) || 0, displayUnit),
                     })
                   }
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-zinc-100 font-mono focus:border-amber-500 focus:outline-none"
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-zinc-100 font-sans focus:border-amber-500 focus:outline-none"
                 />
               </div>
 
               <div>
-                <label className="text-[10px] text-zinc-500 font-mono block mb-1">
+                <label className="text-[10px] text-zinc-500 font-sans block mb-1">
                   Length ({displayUnit})
                 </label>
                 <input
@@ -227,7 +227,7 @@ export function InspectorPanel() {
                       lengthMm: toMm(Number(e.target.value) || 0, displayUnit),
                     })
                   }
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-zinc-100 font-mono focus:border-amber-500 focus:outline-none"
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-zinc-100 font-sans focus:border-amber-500 focus:outline-none"
                 />
               </div>
             </div>
@@ -256,7 +256,7 @@ export function InspectorPanel() {
             </div>
 
             <div>
-              <label className="text-[10px] text-zinc-500 font-mono block mb-1">
+              <label className="text-[10px] text-zinc-500 font-sans block mb-1">
                 Name
               </label>
               <input
@@ -269,7 +269,7 @@ export function InspectorPanel() {
 
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="text-[10px] text-zinc-500 font-mono block mb-1">
+                <label className="text-[10px] text-zinc-500 font-sans block mb-1">
                   X Pos ({displayUnit})
                 </label>
                 <input
@@ -280,12 +280,12 @@ export function InspectorPanel() {
                       xMm: toMm(Number(e.target.value) || 0, displayUnit),
                     })
                   }
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-zinc-100 font-mono focus:border-sky-500 focus:outline-none"
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-zinc-100 font-sans focus:border-sky-500 focus:outline-none"
                 />
               </div>
 
               <div>
-                <label className="text-[10px] text-zinc-500 font-mono block mb-1">
+                <label className="text-[10px] text-zinc-500 font-sans block mb-1">
                   Y Pos ({displayUnit})
                 </label>
                 <input
@@ -296,14 +296,14 @@ export function InspectorPanel() {
                       yMm: toMm(Number(e.target.value) || 0, displayUnit),
                     })
                   }
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-zinc-100 font-mono focus:border-sky-500 focus:outline-none"
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-zinc-100 font-sans focus:border-sky-500 focus:outline-none"
                 />
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="text-[10px] text-zinc-500 font-mono block mb-1">
+                <label className="text-[10px] text-zinc-500 font-sans block mb-1">
                   Width ({displayUnit})
                 </label>
                 <input
@@ -314,12 +314,12 @@ export function InspectorPanel() {
                       widthMm: toMm(Number(e.target.value) || 0, displayUnit),
                     })
                   }
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-zinc-100 font-mono focus:border-sky-500 focus:outline-none"
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-zinc-100 font-sans focus:border-sky-500 focus:outline-none"
                 />
               </div>
 
               <div>
-                <label className="text-[10px] text-zinc-500 font-mono block mb-1">
+                <label className="text-[10px] text-zinc-500 font-sans block mb-1">
                   Height ({displayUnit})
                 </label>
                 <input
@@ -330,7 +330,7 @@ export function InspectorPanel() {
                       heightMm: toMm(Number(e.target.value) || 0, displayUnit),
                     })
                   }
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-zinc-100 font-mono focus:border-sky-500 focus:outline-none"
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-zinc-100 font-sans focus:border-sky-500 focus:outline-none"
                 />
               </div>
             </div>
@@ -355,7 +355,7 @@ export function InspectorPanel() {
             </div>
 
             <div>
-              <label className="text-[10px] text-zinc-500 font-mono block mb-1">
+              <label className="text-[10px] text-zinc-500 font-sans block mb-1">
                 Name
               </label>
               <input
@@ -371,7 +371,7 @@ export function InspectorPanel() {
             {/* Position with Live DIN Snap */}
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="text-[10px] text-zinc-500 font-mono block mb-1">
+                <label className="text-[10px] text-zinc-500 font-sans block mb-1">
                   X Along Rail ({displayUnit})
                 </label>
                 <input
@@ -381,12 +381,12 @@ export function InspectorPanel() {
                     const valMm = toMm(Number(e.target.value) || 0, displayUnit);
                     moveComponent(selectedItem.id, valMm, selectedItem.yMm);
                   }}
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-zinc-100 font-mono focus:border-emerald-500 focus:outline-none"
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-zinc-100 font-sans focus:border-emerald-500 focus:outline-none"
                 />
               </div>
 
               <div>
-                <label className="text-[10px] text-zinc-500 font-mono block mb-1">
+                <label className="text-[10px] text-zinc-500 font-sans block mb-1">
                   Y Pos ({displayUnit})
                 </label>
                 <input
@@ -396,14 +396,14 @@ export function InspectorPanel() {
                     const valMm = toMm(Number(e.target.value) || 0, displayUnit);
                     moveComponent(selectedItem.id, selectedItem.xMm, valMm);
                   }}
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-zinc-100 font-mono focus:border-emerald-500 focus:outline-none"
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-zinc-100 font-sans focus:border-emerald-500 focus:outline-none"
                 />
               </div>
             </div>
 
             <div className="flex items-center justify-between text-zinc-500 text-[11px]">
               <span>Mounted to:</span>
-              <span className="font-mono text-zinc-300">
+              <span className="font-sans text-zinc-300">
                 {selectedItem.railId ? `DIN Rail (${selectedItem.railId})` : "Free Surface"}
               </span>
             </div>
@@ -412,7 +412,7 @@ export function InspectorPanel() {
             <div className="pt-2 border-t border-zinc-900 space-y-1.5">
               <div className="text-[11px] font-medium text-zinc-300 flex items-center justify-between">
                 <span>Pin Terminals ({selectedItem.pins.length})</span>
-                <span className="text-[10px] text-zinc-500 font-mono">Local mm</span>
+                <span className="text-[10px] text-zinc-500 font-sans">Local mm</span>
               </div>
               <div className="max-h-40 overflow-y-auto space-y-1">
                 {selectedItem.pins.map((pin) => (
@@ -420,10 +420,10 @@ export function InspectorPanel() {
                     key={pin.id}
                     className="flex items-center justify-between p-1.5 rounded bg-zinc-900/60 border border-zinc-800/80 text-[11px]"
                   >
-                    <span className="font-mono font-medium text-amber-400">
+                    <span className="font-sans font-medium text-amber-400">
                       {pin.label}
                     </span>
-                    <span className="font-mono text-zinc-400 text-[10px]">
+                    <span className="font-sans text-zinc-400 text-[10px]">
                       [{pin.localXMm}, {pin.localYMm}, {pin.localZMm}]
                     </span>
                   </div>
@@ -452,21 +452,21 @@ export function InspectorPanel() {
 
             <div className="text-[11px] text-zinc-500 flex justify-between">
               <span>Source File:</span>
-              <span className="font-mono text-zinc-300 truncate max-w-[140px]">
+              <span className="font-sans text-zinc-300 truncate max-w-[140px]">
                 {selectedItem.fileName}
               </span>
             </div>
 
             <div className="text-[11px] text-zinc-500 flex justify-between">
               <span>Imported Unit:</span>
-              <span className="font-mono uppercase text-zinc-300">
+              <span className="font-sans uppercase text-zinc-300">
                 {selectedItem.sourceUnit}
               </span>
             </div>
 
             <div className="text-[11px] text-zinc-500 flex justify-between">
               <span>Normalized Size (mm):</span>
-              <span className="font-mono text-zinc-300">
+              <span className="font-sans text-zinc-300">
                 {selectedItem.boundingBoxMm.w} × {selectedItem.boundingBoxMm.h} ×{" "}
                 {selectedItem.boundingBoxMm.d}
               </span>
@@ -475,7 +475,7 @@ export function InspectorPanel() {
             {/* Position inputs */}
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <label className="text-[10px] text-zinc-500 font-mono block mb-1">
+                <label className="text-[10px] text-zinc-500 font-sans block mb-1">
                   X Pos ({displayUnit})
                 </label>
                 <input
@@ -486,12 +486,12 @@ export function InspectorPanel() {
                       xMm: toMm(Number(e.target.value) || 0, displayUnit),
                     })
                   }
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-zinc-100 font-mono focus:border-sky-500 focus:outline-none"
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-zinc-100 font-sans focus:border-sky-500 focus:outline-none"
                 />
               </div>
 
               <div>
-                <label className="text-[10px] text-zinc-500 font-mono block mb-1">
+                <label className="text-[10px] text-zinc-500 font-sans block mb-1">
                   Y Pos ({displayUnit})
                 </label>
                 <input
@@ -502,7 +502,7 @@ export function InspectorPanel() {
                       yMm: toMm(Number(e.target.value) || 0, displayUnit),
                     })
                   }
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-zinc-100 font-mono focus:border-sky-500 focus:outline-none"
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-zinc-100 font-sans focus:border-sky-500 focus:outline-none"
                 />
               </div>
             </div>
@@ -537,10 +537,10 @@ export function InspectorPanel() {
                     key={pin.id}
                     className="flex items-center justify-between p-1.5 rounded bg-zinc-900/60 border border-zinc-800/80 text-[11px]"
                   >
-                    <span className="font-mono font-medium text-amber-400">
+                    <span className="font-sans font-medium text-amber-400">
                       {pin.label}
                     </span>
-                    <span className="font-mono text-zinc-400 text-[10px]">
+                    <span className="font-sans text-zinc-400 text-[10px]">
                       [{pin.localXMm}, {pin.localYMm}, {pin.localZMm}]
                     </span>
                     <button

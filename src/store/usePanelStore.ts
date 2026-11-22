@@ -2,16 +2,33 @@ import { create } from "zustand";
 import { COMPONENT_CATALOG } from "@/lib/components-catalog";
 import {
   clampToBackplate,
+  clampToDuctFreeRailX,
   DIN_RAIL_HEIGHT_MM,
   getRotatedDimensions,
+  overlapsAnyDuct,
+  resolveDuctFreePlatePosition,
   rotateLocalPoint,
   snapComponentToNearestRail,
+  snapSideBySideOnRail,
   snapToGrid,
 } from "@/lib/snap";
 import { getEffectiveCadBounds } from "@/lib/collision";
 import { getBackplateDimensions } from "@/lib/template-export";
-import { resolvePinWorldPoint, routeWireThroughDucts } from "@/lib/wire-router";
+import {
+  buildComponentObstacles,
+  resolvePinExitInfo,
+  resolvePinWorldPoint,
+  routeWireThroughDucts,
+} from "@/lib/wire-router";
 import { generateWireNumbers } from "@/lib/wire-numbering";
+import {
+  computeAlignToPlatePosition,
+  computeAlignToRailX,
+  computeAutoResizeHeight,
+  computeAutoResizeWidth,
+  type PlateAlignEdge,
+  type RailAlignEdge,
+} from "@/lib/layout-align";
 import type {
   CanvasTool2D,
   ComponentTemplateId,
@@ -65,7 +82,30 @@ function makeUid(prefix: string): string {
 
 export const FAVORITES_STORAGE_KEY = "panelflow_favorite_parts";
 export const RECENTS_STORAGE_KEY = "panelflow_recent_parts";
+export const AUTO_ROUTE_STORAGE_KEY = "panelflow_auto_route_ducts";
+export const SHOW_PIN_LABELS_STORAGE_KEY = "panelflow_show_pin_labels";
 export const MAX_RECENT_PARTS = 8;
+
+function saveBoolToStorage(key: string, value: boolean) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(key, value ? "1" : "0");
+  } catch {
+    // ignore storage errors
+  }
+}
+
+function loadBoolFromStorage(key: string): boolean | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (raw === "1" || raw === "true") return true;
+    if (raw === "0" || raw === "false") return false;
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 function loadPartIdsFromStorage(key: string): ComponentTemplateId[] {
   if (typeof window === "undefined") return [];
@@ -117,7 +157,7 @@ function applyThemeToDom(theme: "dark" | "light") {
 }
 
 export type ThemeMode = "dark" | "light";
-export type RightPanelTab = "inspector" | "bom";
+export type RightPanelTab = "inspector" | "panel" | "bom";
 
 export type SheetSnapshot = PanelSheet;
 
@@ -208,16 +248,17 @@ function createDefaultSheet(id = "sheet-1", name = "Sheet 1 (Mounting Plate)", s
       {
         id: "comp-1",
         templateId: "mcb-3p",
-        name: "Main Breaker (MCB 3P)",
+        name: "QF1",
+        mountingType: "din_rail",
         xMm: -160,
         yMm: 200,
-        zMm: 42.5,
+        zMm: 46.75,
         railId: "rail-1",
-        widthMm: 52.5,
-        heightMm: 85,
-        depthMm: 70,
-        color: "#e2e6ed",
-        accentColor: "#dc2626",
+        widthMm: COMPONENT_CATALOG["mcb-3p"].widthMm,
+        heightMm: COMPONENT_CATALOG["mcb-3p"].heightMm,
+        depthMm: COMPONENT_CATALOG["mcb-3p"].depthMm,
+        color: COMPONENT_CATALOG["mcb-3p"].color,
+        accentColor: COMPONENT_CATALOG["mcb-3p"].accentColor,
         pins: COMPONENT_CATALOG["mcb-3p"].pins.map((p, idx) => ({
           ...p,
           id: `comp-1-pin-${idx + 1}`,
@@ -226,16 +267,17 @@ function createDefaultSheet(id = "sheet-1", name = "Sheet 1 (Mounting Plate)", s
       {
         id: "comp-2",
         templateId: "mcb-1p",
-        name: "Control Circuit (MCB 1P)",
+        name: "QF2",
+        mountingType: "din_rail",
         xMm: -100,
         yMm: 200,
-        zMm: 42.5,
+        zMm: 46.75,
         railId: "rail-1",
-        widthMm: 17.5,
-        heightMm: 85,
-        depthMm: 70,
-        color: "#e2e6ed",
-        accentColor: "#2563eb",
+        widthMm: COMPONENT_CATALOG["mcb-1p"].widthMm,
+        heightMm: COMPONENT_CATALOG["mcb-1p"].heightMm,
+        depthMm: COMPONENT_CATALOG["mcb-1p"].depthMm,
+        color: COMPONENT_CATALOG["mcb-1p"].color,
+        accentColor: COMPONENT_CATALOG["mcb-1p"].accentColor,
         pins: COMPONENT_CATALOG["mcb-1p"].pins.map((p, idx) => ({
           ...p,
           id: `comp-2-pin-${idx + 1}`,
@@ -244,16 +286,17 @@ function createDefaultSheet(id = "sheet-1", name = "Sheet 1 (Mounting Plate)", s
       {
         id: "comp-3",
         templateId: "psu-24v",
-        name: "24VDC Power Supply",
+        name: "PS1",
+        mountingType: "din_rail",
         xMm: -120,
         yMm: 40,
-        zMm: 62.5,
+        zMm: 64.25,
         railId: "rail-2",
-        widthMm: 72,
-        heightMm: 125,
-        depthMm: 110,
-        color: "#1e293b",
-        accentColor: "#10b981",
+        widthMm: COMPONENT_CATALOG["psu-24v"].widthMm,
+        heightMm: COMPONENT_CATALOG["psu-24v"].heightMm,
+        depthMm: COMPONENT_CATALOG["psu-24v"].depthMm,
+        color: COMPONENT_CATALOG["psu-24v"].color,
+        accentColor: COMPONENT_CATALOG["psu-24v"].accentColor,
         pins: COMPONENT_CATALOG["psu-24v"].pins.map((p, idx) => ({
           ...p,
           id: `comp-3-pin-${idx + 1}`,
@@ -262,16 +305,17 @@ function createDefaultSheet(id = "sheet-1", name = "Sheet 1 (Mounting Plate)", s
       {
         id: "comp-4",
         templateId: "contactor",
-        name: "Motor Contactor KM1",
+        name: "KM1",
+        mountingType: "din_rail",
         xMm: 20,
         yMm: 40,
-        zMm: 55,
+        zMm: 50.5,
         railId: "rail-2",
-        widthMm: 45,
-        heightMm: 85,
-        depthMm: 95,
-        color: "#334155",
-        accentColor: "#0ea5e9",
+        widthMm: COMPONENT_CATALOG.contactor.widthMm,
+        heightMm: COMPONENT_CATALOG.contactor.heightMm,
+        depthMm: COMPONENT_CATALOG.contactor.depthMm,
+        color: COMPONENT_CATALOG.contactor.color,
+        accentColor: COMPONENT_CATALOG.contactor.accentColor,
         pins: COMPONENT_CATALOG.contactor.pins.map((p, idx) => ({
           ...p,
           id: `comp-4-pin-${idx + 1}`,
@@ -314,9 +358,14 @@ function createDefaultSheet(id = "sheet-1", name = "Sheet 1 (Mounting Plate)", s
 
 const defaultInitialSheet = createDefaultSheet();
 
+interface HistoryEntry {
+  sheets: PanelSheet[];
+  autoRouteDuctsEnabled: boolean;
+}
+
 interface HistoryState {
-  past: PanelSheet[][]; // array of sheets list snapshots
-  future: PanelSheet[][];
+  past: HistoryEntry[];
+  future: HistoryEntry[];
 }
 
 interface PanelStore {
@@ -348,6 +397,9 @@ interface PanelStore {
   activeWireStartPin: { componentId: string; pinId: string } | null;
   autoRouteDuctsEnabled: boolean;
   setAutoRouteDuctsEnabled: (enabled: boolean) => void;
+  showPinLabels: boolean;
+  setShowPinLabels: (show: boolean) => void;
+  toggleShowPinLabels: () => void;
   selected: SelectionTarget;
   selectedIds: SelectedTarget[];
   isPinMarkingMode: boolean;
@@ -394,7 +446,12 @@ interface PanelStore {
 
   // Wire Actions
   addWire: (wire: Omit<WireConnection, "id">) => void;
-  updateWire: (id: string, partial: Partial<WireConnection>) => void;
+  updateWire: (
+    id: string,
+    partial: Partial<WireConnection>,
+    options?: { skipHistory?: boolean }
+  ) => void;
+  updateWires: (ids: string[], partial: Partial<WireConnection>) => void;
   removeWire: (id: string) => void;
   autoRouteWire: (id: string) => void;
   autoRouteAllWires: () => void;
@@ -413,7 +470,7 @@ interface PanelStore {
   setPinMarkingMode: (enabled: boolean, assetId?: string | null) => void;
 
   // Clipboard & Grouping / Locking
-  clipboardItems: Array<PlacedComponent | CustomCadAsset>;
+  clipboardItems: Array<PlacedComponent | CustomCadAsset | DinRail | WireDuct>;
   copySelectedToClipboard: () => number;
   pasteFromClipboard: (offsetMm?: { x: number; y: number }) => SelectedTarget[];
   groupSelectedItems: () => string | null;
@@ -423,7 +480,11 @@ interface PanelStore {
 
   // Rails & Ducts
   addRail: (customPos?: { xMm: number; yMm: number }) => void;
-  updateRail: (id: string, partial: Partial<DinRail>) => void;
+  updateRail: (
+    id: string,
+    partial: Partial<DinRail>,
+    options?: { skipHistory?: boolean }
+  ) => void;
   removeRail: (id: string) => void;
   duplicateRail: (id: string, offsetMm?: { x: number; y: number }) => string | null;
 
@@ -431,10 +492,18 @@ interface PanelStore {
     orientation?: "horizontal" | "vertical",
     customPos?: { xMm: number; yMm: number }
   ) => void;
-  updateDuct: (id: string, partial: Partial<WireDuct>) => void;
+  updateDuct: (
+    id: string,
+    partial: Partial<WireDuct>,
+    options?: { skipHistory?: boolean }
+  ) => void;
   removeDuct: (id: string) => void;
   duplicateDuct: (id: string, offsetMm?: { x: number; y: number }) => string | null;
   alignComponentsOnRail: (railId: string, mode: "distribute" | "left" | "center" | "right") => void;
+  alignItemToPlate: (target: { kind: "component" | "cad" | "rail" | "duct"; id: string }, edge: PlateAlignEdge) => void;
+  alignComponentToRail: (componentId: string, edge: RailAlignEdge) => void;
+  autoResizeToFit: (target: { kind: "rail" | "duct"; id: string }) => void;
+  autoResizeSelectedToFit: () => void;
 
   // Component Actions
   addComponent: (templateId: ComponentTemplateId, nearYMm?: number, customPos?: { xMm: number; yMm: number }) => void;
@@ -496,6 +565,7 @@ interface PanelStore {
     displayUnit?: LengthUnit;
     gridSnapMm?: GridSnapMm;
     autoRouteDuctsEnabled?: boolean;
+    showPinLabels?: boolean;
     titleBlock?: TitleBlockMeta;
   }) => void;
   resetToDefaultProject: () => void;
@@ -507,8 +577,19 @@ let historyStack: HistoryState = {
   future: [],
 };
 
-function pushHistory(currentSheets: PanelSheet[]) {
-  const snapshot = currentSheets.map(cloneSheet);
+function pushHistory(
+  currentSheets: PanelSheet[],
+  autoRouteDuctsEnabled?: boolean
+) {
+  const effectiveAutoRoute =
+    autoRouteDuctsEnabled ??
+    (typeof usePanelStore !== "undefined"
+      ? usePanelStore.getState().autoRouteDuctsEnabled
+      : true);
+  const snapshot: HistoryEntry = {
+    sheets: currentSheets.map(cloneSheet),
+    autoRouteDuctsEnabled: effectiveAutoRoute,
+  };
   historyStack.past.push(snapshot);
   if (historyStack.past.length > MAX_HISTORY) {
     historyStack.past.shift();
@@ -528,6 +609,70 @@ function syncActiveSheetProjection(sheet: PanelSheet) {
     titleBlock: sheet.titleBlock,
     activeSheetType: sheet.sheetType,
   };
+}
+
+/**
+ * Recomputes waypoints for all wires bound to moved/rotated components or CAD assets
+ * so cables stay locked to their pin terminals (inspired by RelayTest live wire binding).
+ */
+function recomputeBoundWires(
+  sheet: PanelSheet,
+  autoRouteDuctsEnabled: boolean,
+  affectedIds?: Set<string> | null
+): PanelSheet {
+  if (sheet.wires.length === 0) return sheet;
+  const obstacles = buildComponentObstacles(sheet.components, sheet.cadAssets);
+  let changed = false;
+  const nextWires = sheet.wires.map((w, idx) => {
+    if (
+      affectedIds &&
+      !affectedIds.has(w.fromComponentId) &&
+      !affectedIds.has(w.toComponentId)
+    ) {
+      return w;
+    }
+    const p1 = resolvePinExitInfo(
+      sheet.components,
+      sheet.cadAssets,
+      w.fromComponentId,
+      w.fromPinId
+    );
+    const p2 = resolvePinExitInfo(
+      sheet.components,
+      sheet.cadAssets,
+      w.toComponentId,
+      w.toPinId
+    );
+    if (!p1 || !p2) return w;
+
+    changed = true;
+    if (autoRouteDuctsEnabled && sheet.ducts.length > 0) {
+      const pts = routeWireThroughDucts(
+        { x: p1.xMm, y: p1.yMm },
+        { x: p2.xMm, y: p2.yMm },
+        sheet.ducts,
+        sheet.rails,
+        idx,
+        {
+          startExitDir: p1.exitDir,
+          endExitDir: p2.exitDir,
+          startStubPt: p1.stubPt,
+          endStubPt: p2.stubPt,
+          obstacles,
+        }
+      );
+      return {
+        ...w,
+        waypoints: pts.map((pt) => ({ xMm: pt.x, yMm: pt.y })),
+      };
+    }
+    return {
+      ...w,
+      waypoints: undefined,
+    };
+  });
+
+  return changed ? { ...sheet, wires: nextWires } : sheet;
 }
 
 export const usePanelStore = create<PanelStore>((set, get) => ({
@@ -556,7 +701,34 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
   activeWireGauge: "2.5",
   activeWireStartPin: null,
   autoRouteDuctsEnabled: true,
-  setAutoRouteDuctsEnabled: (enabled) => set({ autoRouteDuctsEnabled: enabled }),
+  setAutoRouteDuctsEnabled: (enabled) => {
+    const { sheets, activeSheetId, autoRouteDuctsEnabled } = get();
+    if (enabled === autoRouteDuctsEnabled) return;
+    pushHistory(sheets, autoRouteDuctsEnabled);
+    saveBoolToStorage(AUTO_ROUTE_STORAGE_KEY, enabled);
+    const updated = sheets.map((s) =>
+      s.id === activeSheetId ? recomputeBoundWires(s, enabled, null) : s
+    );
+    const active = updated.find((s) => s.id === activeSheetId)!;
+    set({
+      sheets: updated,
+      autoRouteDuctsEnabled: enabled,
+      canUndo: true,
+      canRedo: false,
+      ...syncActiveSheetProjection(active),
+    });
+  },
+  showPinLabels: false,
+  setShowPinLabels: (show) => {
+    saveBoolToStorage(SHOW_PIN_LABELS_STORAGE_KEY, show);
+    set({ showPinLabels: show });
+  },
+  toggleShowPinLabels: () =>
+    set((s) => {
+      const next = !s.showPinLabels;
+      saveBoolToStorage(SHOW_PIN_LABELS_STORAGE_KEY, next);
+      return { showPinLabels: next };
+    }),
   selected: null,
   selectedIds: [],
   clipboardItems: [],
@@ -609,30 +781,38 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
   },
 
   hydratePartPreferences: () => {
+    const savedAutoRoute = loadBoolFromStorage(AUTO_ROUTE_STORAGE_KEY);
+    const savedPinLabels = loadBoolFromStorage(SHOW_PIN_LABELS_STORAGE_KEY);
     set({
       favoritePartIds: loadPartIdsFromStorage(FAVORITES_STORAGE_KEY),
       recentPartIds: loadPartIdsFromStorage(RECENTS_STORAGE_KEY).slice(
         0,
         MAX_RECENT_PARTS
       ),
+      ...(savedAutoRoute !== null ? { autoRouteDuctsEnabled: savedAutoRoute } : {}),
+      ...(savedPinLabels !== null ? { showPinLabels: savedPinLabels } : {}),
     });
   },
 
   undo: () => {
     if (historyStack.past.length === 0) return;
     const currentState = get();
-    const currentSheets = currentState.sheets.map(cloneSheet);
+    historyStack.future.push({
+      sheets: currentState.sheets.map(cloneSheet),
+      autoRouteDuctsEnabled: currentState.autoRouteDuctsEnabled,
+    });
     const previous = historyStack.past.pop()!;
-    historyStack.future.push(currentSheets);
 
-    let activeSheet = previous.find((s) => s.id === currentState.activeSheetId);
+    let activeSheet = previous.sheets.find((s) => s.id === currentState.activeSheetId);
     if (!activeSheet) {
-      activeSheet = previous[0];
+      activeSheet = previous.sheets[0];
     }
 
+    saveBoolToStorage(AUTO_ROUTE_STORAGE_KEY, previous.autoRouteDuctsEnabled);
     set({
-      sheets: previous,
+      sheets: previous.sheets,
       activeSheetId: activeSheet.id,
+      autoRouteDuctsEnabled: previous.autoRouteDuctsEnabled,
       canUndo: historyStack.past.length > 0,
       canRedo: true,
       ...syncActiveSheetProjection(activeSheet),
@@ -642,18 +822,22 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
   redo: () => {
     if (historyStack.future.length === 0) return;
     const currentState = get();
-    const currentSheets = currentState.sheets.map(cloneSheet);
+    historyStack.past.push({
+      sheets: currentState.sheets.map(cloneSheet),
+      autoRouteDuctsEnabled: currentState.autoRouteDuctsEnabled,
+    });
     const next = historyStack.future.pop()!;
-    historyStack.past.push(currentSheets);
 
-    let activeSheet = next.find((s) => s.id === currentState.activeSheetId);
+    let activeSheet = next.sheets.find((s) => s.id === currentState.activeSheetId);
     if (!activeSheet) {
-      activeSheet = next[0];
+      activeSheet = next.sheets[0];
     }
 
+    saveBoolToStorage(AUTO_ROUTE_STORAGE_KEY, next.autoRouteDuctsEnabled);
     set({
-      sheets: next,
+      sheets: next.sheets,
       activeSheetId: activeSheet.id,
+      autoRouteDuctsEnabled: next.autoRouteDuctsEnabled,
       canUndo: true,
       canRedo: historyStack.future.length > 0,
       ...syncActiveSheetProjection(activeSheet),
@@ -905,14 +1089,53 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
       };
     });
 
+    const movedRailDeltas = new Map<string, { dx: number; dy: number; rail: DinRail }>();
     const nextRails = activeSheet.rails.map((r) => {
       if (!railIds.has(r.id)) return r;
       const clamped = clampToBackplate(r.xMm + dxMm, r.yMm + dyMm, r.lengthMm, DIN_RAIL_HEIGHT_MM, plateW, plateH);
-      return {
+      const movedRail = {
         ...r,
         xMm: clamped.xMm,
         yMm: clamped.yMm,
       };
+      movedRailDeltas.set(r.id, {
+        dx: clamped.xMm - r.xMm,
+        dy: clamped.yMm - r.yMm,
+        rail: movedRail,
+      });
+      return movedRail;
+    });
+
+    const railMovedCompIds = new Set<string>();
+    const finalComponents = nextComponents.map((c) => {
+      if (compIds.has(c.id) || c.locked) return c;
+      if (c.railId && movedRailDeltas.has(c.railId)) {
+        const { dx, rail } = movedRailDeltas.get(c.railId)!;
+        const dims = getRotatedDimensions(c.widthMm, c.heightMm, c.rotationDeg ?? 0);
+        const minX = rail.xMm - rail.lengthMm / 2 + dims.widthMm / 2;
+        const maxX = rail.xMm + rail.lengthMm / 2 - dims.widthMm / 2;
+        const nextX = minX <= maxX ? Math.max(minX, Math.min(maxX, c.xMm + dx)) : rail.xMm;
+        railMovedCompIds.add(c.id);
+        return {
+          ...c,
+          xMm: nextX,
+          yMm: rail.yMm,
+        };
+      }
+      return c;
+    }).map((c, _, arr) => {
+      if (c.mountedToComponentId && railMovedCompIds.has(c.mountedToComponentId)) {
+        const parent = arr.find((p) => p.id === c.mountedToComponentId);
+        if (parent) {
+          railMovedCompIds.add(c.id);
+          return {
+            ...c,
+            xMm: parent.xMm,
+            yMm: parent.yMm - parent.heightMm / 2 - c.heightMm / 2,
+          };
+        }
+      }
+      return c;
     });
 
     const nextDucts = activeSheet.ducts.map((d) => {
@@ -925,15 +1148,21 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
       };
     });
 
+    const { autoRouteDuctsEnabled } = get();
+    const affectedIds = new Set<string>([...compIds, ...cadIds, ...railMovedCompIds]);
     const updated = sheets.map((s) =>
       s.id === activeSheetId
-        ? {
-            ...s,
-            components: nextComponents,
-            cadAssets: nextCadAssets,
-            rails: nextRails,
-            ducts: nextDucts,
-          }
+        ? recomputeBoundWires(
+            {
+              ...s,
+              components: finalComponents,
+              cadAssets: nextCadAssets,
+              rails: nextRails,
+              ducts: nextDucts,
+            },
+            autoRouteDuctsEnabled,
+            ductIds.size > 0 ? null : affectedIds
+          )
         : s
     );
 
@@ -980,7 +1209,7 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
     const effectiveIds = selectedIds.length > 0 ? selectedIds : selected ? [selected] : [];
     if (effectiveIds.length === 0) return 0;
 
-    const copied: Array<PlacedComponent | CustomCadAsset> = [];
+    const copied: Array<PlacedComponent | CustomCadAsset | DinRail | WireDuct> = [];
     const seen = new Set<string>();
 
     for (const sel of effectiveIds) {
@@ -1003,6 +1232,18 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
             cropMm: asset.cropMm ? { ...asset.cropMm } : undefined,
             pins: asset.pins.map((p) => ({ ...p })),
           });
+        }
+      } else if (sel.kind === "rail" && !seen.has(`rail:${sel.id}`)) {
+        const rail = activeSheet.rails.find((r) => r.id === sel.id);
+        if (rail) {
+          seen.add(`rail:${sel.id}`);
+          copied.push({ ...rail });
+        }
+      } else if (sel.kind === "duct" && !seen.has(`duct:${sel.id}`)) {
+        const duct = activeSheet.ducts.find((d) => d.id === sel.id);
+        if (duct) {
+          seen.add(`duct:${sel.id}`);
+          copied.push({ ...duct });
         }
       }
     }
@@ -1028,6 +1269,8 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
 
     const existingCompNames = activeSheet.components.map((c) => c.name);
     const existingCadNames = activeSheet.cadAssets.map((a) => a.name);
+    const existingRailNames = activeSheet.rails.map((r) => r.name);
+    const existingDuctNames = activeSheet.ducts.map((d) => d.name);
     const groupMap = new Map<string, string>();
     const mapGroupId = (gid?: string) => {
       if (!gid) return undefined;
@@ -1039,6 +1282,8 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
 
     const newComponents: PlacedComponent[] = [];
     const newCadAssets: CustomCadAsset[] = [];
+    const newRails: DinRail[] = [];
+    const newDucts: WireDuct[] = [];
     const pastedTargets: SelectedTarget[] = [];
 
     for (const item of clipboardItems) {
@@ -1074,7 +1319,7 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
         };
         newComponents.push(pastedComp);
         pastedTargets.push({ kind: "component", id: newId });
-      } else {
+      } else if ("format" in item) {
         const newId = makeUid("cad");
         const nextName = nextIncrementedName(item.name, existingCadNames);
         existingCadNames.push(nextName);
@@ -1107,6 +1352,46 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
         };
         newCadAssets.push(pastedCad);
         pastedTargets.push({ kind: "cad", id: newId });
+      } else if ("lengthMm" in item) {
+        const newId = makeUid("rail");
+        const nextName = nextIncrementedName(item.name, existingRailNames);
+        existingRailNames.push(nextName);
+        const clamped = clampToBackplate(
+          item.xMm + offsetMm.x,
+          item.yMm + offsetMm.y,
+          item.lengthMm,
+          DIN_RAIL_HEIGHT_MM,
+          plateW,
+          plateH
+        );
+        newRails.push({
+          ...item,
+          id: newId,
+          name: nextName,
+          xMm: clamped.xMm,
+          yMm: clamped.yMm,
+        });
+        pastedTargets.push({ kind: "rail", id: newId });
+      } else {
+        const newId = makeUid("duct");
+        const nextName = nextIncrementedName(item.name, existingDuctNames);
+        existingDuctNames.push(nextName);
+        const clamped = clampToBackplate(
+          item.xMm + offsetMm.x,
+          item.yMm + offsetMm.y,
+          item.widthMm,
+          item.heightMm,
+          plateW,
+          plateH
+        );
+        newDucts.push({
+          ...item,
+          id: newId,
+          name: nextName,
+          xMm: clamped.xMm,
+          yMm: clamped.yMm,
+        });
+        pastedTargets.push({ kind: "duct", id: newId });
       }
     }
 
@@ -1116,6 +1401,8 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
             ...s,
             components: [...s.components, ...newComponents],
             cadAssets: [...s.cadAssets, ...newCadAssets],
+            rails: [...s.rails, ...newRails],
+            ducts: [...s.ducts, ...newDucts],
           }
         : s
     );
@@ -1563,25 +1850,36 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
     const activeSheet = sheets.find((s) => s.id === activeSheetId)!;
     let waypoints = wire.waypoints;
     if (!waypoints && autoRouteDuctsEnabled && activeSheet.ducts.length > 0) {
-      const p1 = resolvePinWorldPoint(
+      const p1 = resolvePinExitInfo(
         activeSheet.components,
         activeSheet.cadAssets,
         wire.fromComponentId,
         wire.fromPinId
       );
-      const p2 = resolvePinWorldPoint(
+      const p2 = resolvePinExitInfo(
         activeSheet.components,
         activeSheet.cadAssets,
         wire.toComponentId,
         wire.toPinId
       );
       if (p1 && p2) {
+        const obstacles = buildComponentObstacles(
+          activeSheet.components,
+          activeSheet.cadAssets
+        );
         const pts = routeWireThroughDucts(
           { x: p1.xMm, y: p1.yMm },
           { x: p2.xMm, y: p2.yMm },
           activeSheet.ducts,
           activeSheet.rails,
-          activeSheet.wires.length
+          activeSheet.wires.length,
+          {
+            startExitDir: p1.exitDir,
+            endExitDir: p2.exitDir,
+            startStubPt: p1.stubPt,
+            endStubPt: p2.stubPt,
+            obstacles,
+          }
         );
         waypoints = pts.map((p) => ({ xMm: p.x, yMm: p.y }));
       }
@@ -1600,14 +1898,37 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
     });
   },
 
-  updateWire: (id, partial) => {
+  updateWire: (id, partial, options) => {
+    const { sheets, activeSheetId } = get();
+    if (!options?.skipHistory) {
+      pushHistory(sheets);
+    }
+    const updated = sheets.map((s) =>
+      s.id === activeSheetId
+        ? {
+            ...s,
+            wires: s.wires.map((w) => (w.id === id ? { ...w, ...partial } : w)),
+          }
+        : s
+    );
+    const active = updated.find((s) => s.id === activeSheetId)!;
+    set({
+      sheets: updated,
+      ...(options?.skipHistory ? {} : { canUndo: true, canRedo: false }),
+      ...syncActiveSheetProjection(active),
+    });
+  },
+
+  updateWires: (ids, partial) => {
+    if (ids.length === 0) return;
+    const idSet = new Set(ids);
     const { sheets, activeSheetId } = get();
     pushHistory(sheets);
     const updated = sheets.map((s) =>
       s.id === activeSheetId
         ? {
             ...s,
-            wires: s.wires.map((w) => (w.id === id ? { ...w, ...partial } : w)),
+            wires: s.wires.map((w) => (idSet.has(w.id) ? { ...w, ...partial } : w)),
           }
         : s
     );
@@ -1646,13 +1967,13 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
     const wireIdx = activeSheet.wires.findIndex((w) => w.id === id);
     if (wireIdx === -1) return;
     const wire = activeSheet.wires[wireIdx];
-    const p1 = resolvePinWorldPoint(
+    const p1 = resolvePinExitInfo(
       activeSheet.components,
       activeSheet.cadAssets,
       wire.fromComponentId,
       wire.fromPinId
     );
-    const p2 = resolvePinWorldPoint(
+    const p2 = resolvePinExitInfo(
       activeSheet.components,
       activeSheet.cadAssets,
       wire.toComponentId,
@@ -1661,12 +1982,23 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
     if (!p1 || !p2) return;
 
     pushHistory(sheets);
+    const obstacles = buildComponentObstacles(
+      activeSheet.components,
+      activeSheet.cadAssets
+    );
     const pts = routeWireThroughDucts(
       { x: p1.xMm, y: p1.yMm },
       { x: p2.xMm, y: p2.yMm },
       activeSheet.ducts,
       activeSheet.rails,
-      wireIdx
+      wireIdx,
+      {
+        startExitDir: p1.exitDir,
+        endExitDir: p2.exitDir,
+        startStubPt: p1.stubPt,
+        endStubPt: p2.stubPt,
+        obstacles,
+      }
     );
     const waypoints = pts.map((p) => ({ xMm: p.x, yMm: p.y }));
     const updated = sheets.map((s) =>
@@ -1691,14 +2023,18 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
     const activeSheet = sheets.find((s) => s.id === activeSheetId);
     if (!activeSheet || activeSheet.wires.length === 0) return;
     pushHistory(sheets);
+    const obstacles = buildComponentObstacles(
+      activeSheet.components,
+      activeSheet.cadAssets
+    );
     const routedWires = activeSheet.wires.map((wire, idx) => {
-      const p1 = resolvePinWorldPoint(
+      const p1 = resolvePinExitInfo(
         activeSheet.components,
         activeSheet.cadAssets,
         wire.fromComponentId,
         wire.fromPinId
       );
-      const p2 = resolvePinWorldPoint(
+      const p2 = resolvePinExitInfo(
         activeSheet.components,
         activeSheet.cadAssets,
         wire.toComponentId,
@@ -1710,7 +2046,14 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
         { x: p2.xMm, y: p2.yMm },
         activeSheet.ducts,
         activeSheet.rails,
-        idx
+        idx,
+        {
+          startExitDir: p1.exitDir,
+          endExitDir: p2.exitDir,
+          startStubPt: p1.stubPt,
+          endStubPt: p2.stubPt,
+          obstacles,
+        }
       );
       return {
         ...wire,
@@ -1819,22 +2162,78 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
     return newId;
   },
 
-  updateRail: (id, partial) => {
-    const { sheets, activeSheetId } = get();
-    pushHistory(sheets);
-    const updated = sheets.map((s) =>
-      s.id === activeSheetId
-        ? {
-            ...s,
-            rails: s.rails.map((r) => (r.id === id ? { ...r, ...partial } : r)),
+  updateRail: (id, partial, options) => {
+    const { sheets, activeSheetId, autoRouteDuctsEnabled } = get();
+    const activeSheet = sheets.find((s) => s.id === activeSheetId);
+    const prevRail = activeSheet?.rails.find((r) => r.id === id);
+    if (!activeSheet || !prevRail) return;
+
+    const nextRail: DinRail = { ...prevRail, ...partial };
+    const dx = nextRail.xMm - prevRail.xMm;
+    const dy = nextRail.yMm - prevRail.yMm;
+    const lengthChanged = nextRail.lengthMm !== prevRail.lengthMm;
+
+    if (!options?.skipHistory) {
+      pushHistory(sheets);
+    }
+
+    const movedCompIds = new Set<string>();
+    const updated = sheets.map((s) => {
+      if (s.id !== activeSheetId) return s;
+
+      const nextRails = s.rails.map((r) => (r.id === id ? nextRail : r));
+      if (dx === 0 && dy === 0 && !lengthChanged) {
+        return { ...s, rails: nextRails };
+      }
+
+      // Move all components bound to this DIN rail (and clamp inside new rail length)
+      const movedDirect = s.components.map((c) => {
+        if (c.railId !== id) return c;
+        const dims = getRotatedDimensions(c.widthMm, c.heightMm, c.rotationDeg ?? 0);
+        const minX = nextRail.xMm - nextRail.lengthMm / 2 + dims.widthMm / 2;
+        const maxX = nextRail.xMm + nextRail.lengthMm / 2 - dims.widthMm / 2;
+        const rawX = c.xMm + dx;
+        const nextX =
+          minX <= maxX ? Math.max(minX, Math.min(maxX, rawX)) : nextRail.xMm;
+        movedCompIds.add(c.id);
+        return {
+          ...c,
+          xMm: nextX,
+          yMm: nextRail.yMm,
+        };
+      });
+
+      // Also move child components mounted to parents on this rail (e.g., TOR under Contactor)
+      const nextComponents = movedDirect.map((c) => {
+        if (c.mountedToComponentId && movedCompIds.has(c.mountedToComponentId)) {
+          const parent = movedDirect.find((p) => p.id === c.mountedToComponentId);
+          if (parent) {
+            movedCompIds.add(c.id);
+            return {
+              ...c,
+              xMm: parent.xMm,
+              yMm: parent.yMm - parent.heightMm / 2 - c.heightMm / 2,
+            };
           }
-        : s
-    );
+        }
+        return c;
+      });
+
+      return recomputeBoundWires(
+        {
+          ...s,
+          rails: nextRails,
+          components: nextComponents,
+        },
+        autoRouteDuctsEnabled,
+        movedCompIds.size > 0 ? movedCompIds : null
+      );
+    });
+
     const active = updated.find((s) => s.id === activeSheetId)!;
     set({
       sheets: updated,
-      canUndo: true,
-      canRedo: false,
+      ...(options?.skipHistory ? {} : { canUndo: true, canRedo: false }),
       ...syncActiveSheetProjection(active),
     });
   },
@@ -1941,9 +2340,11 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
     return newId;
   },
 
-  updateDuct: (id, partial) => {
+  updateDuct: (id, partial, options) => {
     const { sheets, activeSheetId } = get();
-    pushHistory(sheets);
+    if (!options?.skipHistory) {
+      pushHistory(sheets);
+    }
     const updated = sheets.map((s) =>
       s.id === activeSheetId
         ? {
@@ -1955,8 +2356,7 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
     const active = updated.find((s) => s.id === activeSheetId)!;
     set({
       sheets: updated,
-      canUndo: true,
-      canRedo: false,
+      ...(options?.skipHistory ? {} : { canUndo: true, canRedo: false }),
       ...syncActiveSheetProjection(active),
     });
   },
@@ -2064,60 +2464,465 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
     });
   },
 
+  alignItemToPlate: (target, edge) => {
+    const { sheets, activeSheetId, enclosure, plateConfig } = get();
+    const { widthMm: plateW, heightMm: plateH } = getBackplateDimensions(
+      enclosure,
+      plateConfig
+    );
+    pushHistory(sheets);
+    const updated = sheets.map((s) => {
+      if (s.id !== activeSheetId) return s;
+      if (target.kind === "duct") {
+        return {
+          ...s,
+          ducts: s.ducts.map((d) => {
+            if (d.id !== target.id) return d;
+            const pos = computeAlignToPlatePosition(
+              d.widthMm,
+              d.heightMm,
+              d.xMm,
+              d.yMm,
+              plateW,
+              plateH,
+              edge
+            );
+            return { ...d, ...pos };
+          }),
+        };
+      }
+      if (target.kind === "rail") {
+        return {
+          ...s,
+          rails: s.rails.map((r) => {
+            if (r.id !== target.id) return r;
+            const pos = computeAlignToPlatePosition(
+              r.lengthMm,
+              DIN_RAIL_HEIGHT_MM,
+              r.xMm,
+              r.yMm,
+              plateW,
+              plateH,
+              edge
+            );
+            return { ...r, ...pos };
+          }),
+        };
+      }
+      if (target.kind === "component") {
+        return {
+          ...s,
+          components: s.components.map((c) => {
+            if (c.id !== target.id) return c;
+            const dims = getRotatedDimensions(
+              c.widthMm,
+              c.heightMm,
+              c.rotationDeg ?? 0
+            );
+            const pos = computeAlignToPlatePosition(
+              dims.widthMm,
+              dims.heightMm,
+              c.xMm,
+              c.yMm,
+              plateW,
+              plateH,
+              edge
+            );
+            return { ...c, ...pos };
+          }),
+        };
+      }
+      return {
+        ...s,
+        cadAssets: s.cadAssets.map((a) => {
+          if (a.id !== target.id) return a;
+          const bounds = getEffectiveCadBounds(a);
+          const dims = getRotatedDimensions(bounds.widthMm, bounds.heightMm, a.rotationDeg ?? 0);
+          const pos = computeAlignToPlatePosition(
+            dims.widthMm,
+            dims.heightMm,
+            a.xMm + bounds.offsetX,
+            a.yMm + bounds.offsetY,
+            plateW,
+            plateH,
+            edge
+          );
+          return {
+            ...a,
+            xMm: pos.xMm - bounds.offsetX,
+            yMm: pos.yMm - bounds.offsetY,
+          };
+        }),
+      };
+    });
+    const active = updated.find((s) => s.id === activeSheetId)!;
+    set({
+      sheets: updated,
+      canUndo: true,
+      canRedo: false,
+      ...syncActiveSheetProjection(active),
+    });
+  },
+
+  alignComponentToRail: (componentId, edge) => {
+    const { sheets, activeSheetId } = get();
+    const activeSheet = sheets.find((s) => s.id === activeSheetId);
+    if (!activeSheet) return;
+    const comp = activeSheet.components.find((c) => c.id === componentId);
+    if (!comp || !comp.railId) return;
+    const rail = activeSheet.rails.find((r) => r.id === comp.railId);
+    if (!rail) return;
+
+    const dims = getRotatedDimensions(
+      comp.widthMm,
+      comp.heightMm,
+      comp.rotationDeg ?? 0
+    );
+    const nextX = computeAlignToRailX(dims.widthMm, rail, edge);
+    pushHistory(sheets);
+    const updated = sheets.map((s) =>
+      s.id === activeSheetId
+        ? {
+            ...s,
+            components: s.components.map((c) =>
+              c.id === componentId
+                ? { ...c, xMm: Number(nextX.toFixed(2)), yMm: rail.yMm }
+                : c
+            ),
+          }
+        : s
+    );
+    const active = updated.find((s) => s.id === activeSheetId)!;
+    set({
+      sheets: updated,
+      canUndo: true,
+      canRedo: false,
+      ...syncActiveSheetProjection(active),
+    });
+  },
+
+  autoResizeToFit: (target) => {
+    const { sheets, activeSheetId, enclosure, plateConfig } = get();
+    const activeSheet = sheets.find((s) => s.id === activeSheetId);
+    if (!activeSheet) return;
+    const { widthMm: plateW, heightMm: plateH } = getBackplateDimensions(
+      enclosure,
+      plateConfig
+    );
+    pushHistory(sheets);
+
+    const updated = sheets.map((s) => {
+      if (s.id !== activeSheetId) return s;
+      if (target.kind === "rail") {
+        const rail = s.rails.find((r) => r.id === target.id);
+        if (!rail) return s;
+        const { xMm, widthMm } = computeAutoResizeWidth({
+          targetId: rail.id,
+          targetKind: "rail",
+          anchorXMm: rail.xMm,
+          yMm: rail.yMm,
+          bandHeightMm: DIN_RAIL_HEIGHT_MM,
+          plateWidthMm: plateW,
+          rails: s.rails,
+          ducts: s.ducts,
+          components: s.components,
+          cadAssets: s.cadAssets,
+        });
+        return {
+          ...s,
+          rails: s.rails.map((r) =>
+            r.id === rail.id ? { ...r, xMm, lengthMm: widthMm } : r
+          ),
+        };
+      }
+      const duct = s.ducts.find((d) => d.id === target.id);
+      if (!duct) return s;
+      if (duct.orientation === "horizontal") {
+        const { xMm, widthMm } = computeAutoResizeWidth({
+          targetId: duct.id,
+          targetKind: "duct",
+          anchorXMm: duct.xMm,
+          yMm: duct.yMm,
+          bandHeightMm: duct.heightMm,
+          plateWidthMm: plateW,
+          rails: s.rails,
+          ducts: s.ducts,
+          components: s.components,
+          cadAssets: s.cadAssets,
+        });
+        return {
+          ...s,
+          ducts: s.ducts.map((d) =>
+            d.id === duct.id ? { ...d, xMm, widthMm } : d
+          ),
+        };
+      }
+      const { yMm, heightMm } = computeAutoResizeHeight({
+        targetId: duct.id,
+        xMm: duct.xMm,
+        anchorYMm: duct.yMm,
+        bandWidthMm: duct.widthMm,
+        plateHeightMm: plateH,
+        rails: s.rails,
+        ducts: s.ducts,
+        components: s.components,
+        cadAssets: s.cadAssets,
+      });
+      return {
+        ...s,
+        ducts: s.ducts.map((d) =>
+          d.id === duct.id ? { ...d, yMm, heightMm } : d
+        ),
+      };
+    });
+    const active = updated.find((s) => s.id === activeSheetId)!;
+    set({
+      sheets: updated,
+      canUndo: true,
+      canRedo: false,
+      ...syncActiveSheetProjection(active),
+    });
+  },
+
+  autoResizeSelectedToFit: () => {
+    const { sheets, activeSheetId, selectedIds, enclosure, plateConfig } = get();
+    if (selectedIds.length === 0) return;
+    const activeSheet = sheets.find((s) => s.id === activeSheetId);
+    if (!activeSheet) return;
+
+    const orientations = selectedIds.map((sel) => {
+      if (sel.kind === "rail") return "horizontal";
+      if (sel.kind === "duct") {
+        return activeSheet.ducts.find((d) => d.id === sel.id)?.orientation ?? null;
+      }
+      return null;
+    });
+    const allHorizontal = orientations.every((o) => o === "horizontal");
+    const allVertical = orientations.every((o) => o === "vertical");
+    if (!allHorizontal && !allVertical) return;
+
+    const { widthMm: plateW, heightMm: plateH } = getBackplateDimensions(
+      enclosure,
+      plateConfig
+    );
+    const railSet = new Set(
+      selectedIds.filter((s) => s.kind === "rail").map((s) => s.id)
+    );
+    const ductSet = new Set(
+      selectedIds.filter((s) => s.kind === "duct").map((s) => s.id)
+    );
+    pushHistory(sheets);
+
+    const updated = sheets.map((s) => {
+      if (s.id !== activeSheetId) return s;
+      return {
+        ...s,
+        rails: allHorizontal
+          ? s.rails.map((r) => {
+              if (!railSet.has(r.id)) return r;
+              const { xMm, widthMm } = computeAutoResizeWidth({
+                targetId: r.id,
+                targetKind: "rail",
+                anchorXMm: r.xMm,
+                yMm: r.yMm,
+                bandHeightMm: DIN_RAIL_HEIGHT_MM,
+                plateWidthMm: plateW,
+                rails: s.rails,
+                ducts: s.ducts,
+                components: s.components,
+                cadAssets: s.cadAssets,
+              });
+              return { ...r, xMm, lengthMm: widthMm };
+            })
+          : s.rails,
+        ducts: s.ducts.map((d) => {
+          if (!ductSet.has(d.id)) return d;
+          if (allHorizontal && d.orientation === "horizontal") {
+            const { xMm, widthMm } = computeAutoResizeWidth({
+              targetId: d.id,
+              targetKind: "duct",
+              anchorXMm: d.xMm,
+              yMm: d.yMm,
+              bandHeightMm: d.heightMm,
+              plateWidthMm: plateW,
+              rails: s.rails,
+              ducts: s.ducts,
+              components: s.components,
+              cadAssets: s.cadAssets,
+            });
+            return { ...d, xMm, widthMm };
+          }
+          if (allVertical && d.orientation === "vertical") {
+            const { yMm, heightMm } = computeAutoResizeHeight({
+              targetId: d.id,
+              xMm: d.xMm,
+              anchorYMm: d.yMm,
+              bandWidthMm: d.widthMm,
+              plateHeightMm: plateH,
+              rails: s.rails,
+              ducts: s.ducts,
+              components: s.components,
+              cadAssets: s.cadAssets,
+            });
+            return { ...d, yMm, heightMm };
+          }
+          return d;
+        }),
+      };
+    });
+
+    const active = updated.find((s) => s.id === activeSheetId)!;
+    set({
+      sheets: updated,
+      canUndo: true,
+      canRedo: false,
+      ...syncActiveSheetProjection(active),
+    });
+  },
+
   addComponent: (templateId, nearYMm, customPos) => {
     const template = COMPONENT_CATALOG[templateId];
     if (!template) return;
-    const { sheets, activeSheetId, gridSnapMm } = get();
+    const { sheets, activeSheetId, gridSnapMm, selected } = get();
     const activeSheet = sheets.find((s) => s.id === activeSheetId)!;
-    pushHistory(sheets);
 
+    let mountedToComponentId: string | undefined;
     let snapResult: { railId: string | null; xMm: number; yMm: number; zMm: number };
     const mounting = template.mountingType ?? "din_rail";
-    if (mounting === "din_rail") {
-      if (customPos) {
-        snapResult = snapComponentToNearestRail(
-          customPos.xMm,
-          customPos.yMm,
-          template.widthMm,
-          template.depthMm,
-          activeSheet.rails,
-          gridSnapMm,
-          35
-        );
-      } else {
-        const targetY = nearYMm ?? (activeSheet.rails[0]?.yMm ?? 0);
-        snapResult = snapComponentToNearestRail(
-          0,
-          targetY,
-          template.widthMm,
-          template.depthMm,
-          activeSheet.rails,
-          gridSnapMm
-        );
+
+    if (mounting === "parent_mount" || templateId === "tor") {
+      const targetTemplates = template.behavior?.mountTargetTemplateIds ?? ["contactor"];
+      const availableParents = activeSheet.components.filter(
+        (c) =>
+          targetTemplates.includes(c.templateId) &&
+          !activeSheet.components.some(
+            (other) =>
+              other.templateId === templateId &&
+              other.mountedToComponentId === c.id
+          )
+      );
+      if (availableParents.length === 0) {
+        return;
       }
+      let targetParent =
+        selected?.kind === "component"
+          ? availableParents.find((c) => c.id === selected.id)
+          : undefined;
+      if (!targetParent && customPos) {
+        targetParent = [...availableParents].sort((a, b) => {
+          const da = Math.hypot(a.xMm - customPos.xMm, a.yMm - customPos.yMm);
+          const db = Math.hypot(b.xMm - customPos.xMm, b.yMm - customPos.yMm);
+          return da - db;
+        })[0];
+      }
+      targetParent = targetParent ?? availableParents[0];
+      mountedToComponentId = targetParent.id;
+      snapResult = {
+        railId: null,
+        xMm: targetParent.xMm,
+        yMm:
+          targetParent.yMm -
+          targetParent.heightMm / 2 -
+          template.heightMm / 2,
+        zMm: targetParent.zMm,
+      };
+    } else if (mounting === "din_rail") {
+      // DIN-rail components can ONLY be placed on an existing DIN rail, never on a duct or floating
+      if (activeSheet.rails.length === 0) {
+        return;
+      }
+      const targetX = customPos?.xMm ?? 0;
+      const targetY = customPos?.yMm ?? nearYMm ?? activeSheet.rails[0].yMm;
+      snapResult = snapComponentToNearestRail(
+        targetX,
+        targetY,
+        template.widthMm,
+        template.depthMm,
+        activeSheet.rails,
+        gridSnapMm
+      );
+      if (!snapResult.railId) {
+        return;
+      }
+      const rail = activeSheet.rails.find((r) => r.id === snapResult.railId)!;
+      if (template.behavior?.sideBySideSnap) {
+        const railBounds = {
+          minX: rail.xMm - rail.lengthMm / 2 + template.widthMm / 2,
+          maxX: rail.xMm + rail.lengthMm / 2 - template.widthMm / 2,
+        };
+        const sideSnap = snapSideBySideOnRail(
+          snapResult.xMm,
+          template.widthMm,
+          snapResult.railId,
+          activeSheet.components,
+          "",
+          railBounds
+        );
+        snapResult = { ...snapResult, xMm: sideSnap.xMm };
+      }
+      const ductFreeX = clampToDuctFreeRailX(
+        snapResult.xMm,
+        rail,
+        template.widthMm,
+        template.heightMm,
+        activeSheet.ducts
+      );
+      if (ductFreeX === null) {
+        return;
+      }
+      snapResult = { ...snapResult, xMm: ductFreeX };
+    } else if (mounting === "screw_plate") {
+      // screw_plate: free mount on backplate (no DIN snap), but never overlapping Wire Ducts
+      const rawX = snapToGrid(customPos?.xMm ?? 0, gridSnapMm);
+      const rawY = snapToGrid(customPos?.yMm ?? nearYMm ?? 0, gridSnapMm);
+      const resolved = resolveDuctFreePlatePosition(
+        rawX,
+        rawY,
+        template.widthMm,
+        template.heightMm,
+        activeSheet.ducts
+      );
+      if (!resolved) {
+        return;
+      }
+      snapResult = {
+        railId: null,
+        xMm: resolved.xMm,
+        yMm: resolved.yMm,
+        zMm: template.depthMm / 2,
+      };
     } else {
+      // door_cutout: mounts on door face (no DIN rail snap, unaffected by backplate ducts)
       snapResult = {
         railId: null,
         xMm: snapToGrid(customPos?.xMm ?? 0, gridSnapMm),
         yMm: snapToGrid(customPos?.yMm ?? nearYMm ?? 0, gridSnapMm),
-        zMm: template.depthMm / 2 + 2,
+        zMm: template.depthMm / 2,
       };
     }
 
+    pushHistory(sheets);
+
     const id = makeUid("comp");
+    const prefix = template.tagPrefix || template.shortName;
+    const existingNames = new Set(activeSheet.components.map((c) => c.name));
+    let nextTagNum = 1;
+    while (existingNames.has(`${prefix}${nextTagNum}`)) {
+      nextTagNum += 1;
+    }
+    const autoTagName = `${prefix}${nextTagNum}`;
+
     const newComponent: PlacedComponent = {
       id,
       templateId,
-      name: nextIncrementedName(
-        template.shortName,
-        activeSheet.components.map((c) => c.name)
-      ),
+      name: autoTagName,
       mountingType: mounting,
       xMm: snapResult.xMm,
       yMm: snapResult.yMm,
       zMm: snapResult.zMm,
       rotationDeg: 0,
       railId: snapResult.railId,
+      mountedToComponentId,
       widthMm: template.widthMm,
       heightMm: template.heightMm,
       depthMm: template.depthMm,
@@ -2151,19 +2956,23 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
   },
 
   rotateComponent: (id, deltaDeg = 90) => {
-    const { sheets, activeSheetId } = get();
+    const { sheets, activeSheetId, autoRouteDuctsEnabled } = get();
     pushHistory(sheets);
     const updated = sheets.map((s) =>
       s.id === activeSheetId
-        ? {
-            ...s,
-            components: s.components.map((c) => {
-              if (c.id !== id) return c;
-              const current = c.rotationDeg ?? 0;
-              const nextDeg = (((current + deltaDeg) % 360) + 360) % 360 as RotationDeg;
-              return { ...c, rotationDeg: nextDeg };
-            }),
-          }
+        ? recomputeBoundWires(
+            {
+              ...s,
+              components: s.components.map((c) => {
+                if (c.id !== id) return c;
+                const current = c.rotationDeg ?? 0;
+                const nextDeg = (((current + deltaDeg) % 360) + 360) % 360 as RotationDeg;
+                return { ...c, rotationDeg: nextDeg };
+              }),
+            },
+            autoRouteDuctsEnabled,
+            new Set([id])
+          )
         : s
     );
     const active = updated.find((s) => s.id === activeSheetId)!;
@@ -2308,84 +3117,285 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
     const comp = activeSheet.components.find((c) => c.id === id);
     if (!comp || comp.locked) return;
 
-    const snapResult = snapComponentToNearestRail(
-      targetXMm,
-      targetYMm,
-      comp.widthMm,
-      comp.depthMm,
-      activeSheet.rails,
-      gridSnapMm
-    );
-
-    const effectiveX = options?.skipGridSnapX ? targetXMm : snapResult.xMm;
-    const effectiveY = options?.skipGridSnapY ? targetYMm : snapResult.yMm;
-
     const { widthMm: plateW, heightMm: plateH } = getBackplateDimensions(
       enclosure,
       plateConfig
     );
+
+    // Mounted TOR stays attached to a Contactor (can re-mount to another nearby Contactor)
+    if (comp.templateId === "tor" && comp.mountedToComponentId) {
+      const availableContactors = activeSheet.components.filter(
+        (c) =>
+          c.templateId === "contactor" &&
+          !activeSheet.components.some(
+            (other) =>
+              other.id !== comp.id &&
+              other.templateId === "tor" &&
+              other.mountedToComponentId === c.id
+          )
+      );
+      let targetParent = availableContactors.find(
+        (c) => c.id === comp.mountedToComponentId
+      );
+      const nearest = [...availableContactors].sort((a, b) => {
+        const da = Math.hypot(a.xMm - targetXMm, a.yMm - a.heightMm / 2 - comp.heightMm / 2 - targetYMm);
+        const db = Math.hypot(b.xMm - targetXMm, b.yMm - b.heightMm / 2 - comp.heightMm / 2 - targetYMm);
+        return da - db;
+      })[0];
+      if (nearest) {
+        const dist = Math.hypot(
+          nearest.xMm - targetXMm,
+          nearest.yMm - nearest.heightMm / 2 - comp.heightMm / 2 - targetYMm
+        );
+        if (dist <= 60) {
+          targetParent = nearest;
+        }
+      }
+      if (!targetParent) return;
+      const mountedX = targetParent.xMm;
+      const mountedY =
+        targetParent.yMm - targetParent.heightMm / 2 - comp.heightMm / 2;
+      const { autoRouteDuctsEnabled } = get();
+      const updated = sheets.map((s) =>
+        s.id === activeSheetId
+          ? recomputeBoundWires(
+              {
+                ...s,
+                components: s.components.map((c) =>
+                  c.id === id
+                    ? {
+                        ...c,
+                        xMm: mountedX,
+                        yMm: mountedY,
+                        zMm: targetParent.zMm,
+                        railId: null,
+                        mountedToComponentId: targetParent.id,
+                      }
+                    : c
+                ),
+              },
+              autoRouteDuctsEnabled,
+              new Set([id])
+            )
+          : s
+      );
+      const active = updated.find((s) => s.id === activeSheetId)!;
+      set({
+        sheets: updated,
+        ...syncActiveSheetProjection(active),
+      });
+      return;
+    }
+
+    const template = COMPONENT_CATALOG[comp.templateId];
+    const effectiveMounting =
+      comp.mountingType ?? template?.mountingType ?? "din_rail";
+    const rotDims = getRotatedDimensions(
+      comp.widthMm,
+      comp.heightMm,
+      comp.rotationDeg ?? 0
+    );
+
+    let snapResult: { railId: string | null; xMm: number; yMm: number; zMm: number };
+    let effectiveX: number;
+    let effectiveY: number;
+
+    if (effectiveMounting === "din_rail") {
+      // DIN-rail components can ONLY move along DIN rails and never onto Wire Ducts
+      if (activeSheet.rails.length === 0) return;
+
+      snapResult = snapComponentToNearestRail(
+        targetXMm,
+        targetYMm,
+        rotDims.widthMm,
+        comp.depthMm,
+        activeSheet.rails,
+        gridSnapMm
+      );
+      if (!snapResult.railId) return;
+
+      const rail = activeSheet.rails.find((r) => r.id === snapResult.railId);
+      if (!rail) return;
+
+      const railMinX = rail.xMm - rail.lengthMm / 2 + rotDims.widthMm / 2;
+      const railMaxX = rail.xMm + rail.lengthMm / 2 - rotDims.widthMm / 2;
+      let candidateX = options?.skipGridSnapX
+        ? Math.max(railMinX, Math.min(railMaxX, targetXMm))
+        : snapResult.xMm;
+
+      if (template?.behavior?.sideBySideSnap && !options?.skipGridSnapX) {
+        const sideSnap = snapSideBySideOnRail(
+          targetXMm,
+          rotDims.widthMm,
+          snapResult.railId,
+          activeSheet.components.filter(
+            (other) => !comp.groupId || other.groupId !== comp.groupId
+          ),
+          comp.id,
+          { minX: railMinX, maxX: railMaxX }
+        );
+        if (sideSnap.snappedToNeighborId) {
+          candidateX = sideSnap.xMm;
+        }
+      }
+
+      const ductFreeX = clampToDuctFreeRailX(
+        candidateX,
+        rail,
+        rotDims.widthMm,
+        rotDims.heightMm,
+        activeSheet.ducts
+      );
+      if (ductFreeX === null) {
+        // Entire rail is blocked by a duct; stay at previous valid position
+        return;
+      }
+
+      // Always lock Y to DIN rail (ignore skipGridSnapY so alignment guides cannot pull off-rail)
+      effectiveX = ductFreeX;
+      effectiveY = rail.yMm;
+    } else if (effectiveMounting === "screw_plate") {
+      // screw_plate: free on backplate (no DIN snap), but cannot overlap Wire Ducts
+      const rawX = options?.skipGridSnapX
+        ? targetXMm
+        : snapToGrid(targetXMm, gridSnapMm);
+      const rawY = options?.skipGridSnapY
+        ? targetYMm
+        : snapToGrid(targetYMm, gridSnapMm);
+
+      const resolved = resolveDuctFreePlatePosition(
+        rawX,
+        rawY,
+        rotDims.widthMm,
+        rotDims.heightMm,
+        activeSheet.ducts,
+        { xMm: comp.xMm, yMm: comp.yMm }
+      );
+      if (!resolved) return;
+
+      snapResult = {
+        railId: null,
+        xMm: resolved.xMm,
+        yMm: resolved.yMm,
+        zMm: comp.depthMm / 2,
+      };
+      effectiveX = resolved.xMm;
+      effectiveY = resolved.yMm;
+    } else {
+      // door_cutout: free positioning on door (no DIN snap, unaffected by backplate ducts)
+      snapResult = {
+        railId: null,
+        xMm: snapToGrid(targetXMm, gridSnapMm),
+        yMm: snapToGrid(targetYMm, gridSnapMm),
+        zMm: comp.depthMm / 2,
+      };
+      effectiveX = options?.skipGridSnapX ? targetXMm : snapResult.xMm;
+      effectiveY = options?.skipGridSnapY ? targetYMm : snapResult.yMm;
+    }
+
     const clamped = clampToBackplate(
       effectiveX,
       effectiveY,
-      comp.widthMm,
-      comp.heightMm,
+      rotDims.widthMm,
+      rotDims.heightMm,
       plateW,
       plateH
     );
 
+    if (
+      effectiveMounting === "screw_plate" &&
+      overlapsAnyDuct(
+        clamped.xMm,
+        clamped.yMm,
+        rotDims.widthMm,
+        rotDims.heightMm,
+        activeSheet.ducts
+      )
+    ) {
+      return;
+    }
+
     const deltaX = clamped.xMm - comp.xMm;
     const deltaY = clamped.yMm - comp.yMm;
+    const { autoRouteDuctsEnabled } = get();
+    const movedIds = new Set<string>([id]);
+    for (const c of activeSheet.components) {
+      if (
+        (c.templateId === "tor" && c.mountedToComponentId === id) ||
+        (comp.groupId && c.groupId === comp.groupId && !c.locked)
+      ) {
+        movedIds.add(c.id);
+      }
+    }
+    for (const a of activeSheet.cadAssets) {
+      if (comp.groupId && a.groupId === comp.groupId && !a.locked) {
+        movedIds.add(a.id);
+      }
+    }
 
     const updated = sheets.map((s) =>
       s.id === activeSheetId
-        ? {
-            ...s,
-            components: s.components.map((c) => {
-              if (c.id === id) {
-                return {
-                  ...c,
-                  xMm: clamped.xMm,
-                  yMm: clamped.yMm,
-                  zMm: snapResult.zMm,
-                  railId: snapResult.railId,
-                };
-              }
-              if (comp.groupId && c.groupId === comp.groupId && !c.locked) {
-                const subClamped = clampToBackplate(
-                  c.xMm + deltaX,
-                  c.yMm + deltaY,
-                  c.widthMm,
-                  c.heightMm,
-                  plateW,
-                  plateH
-                );
-                return {
-                  ...c,
-                  xMm: subClamped.xMm,
-                  yMm: subClamped.yMm,
-                };
-              }
-              return c;
-            }),
-            cadAssets: s.cadAssets.map((a) => {
-              if (comp.groupId && a.groupId === comp.groupId && !a.locked) {
-                const subClamped = clampToBackplate(
-                  a.xMm + deltaX,
-                  a.yMm + deltaY,
-                  a.boundingBoxMm.w,
-                  a.boundingBoxMm.h,
-                  plateW,
-                  plateH
-                );
-                return {
-                  ...a,
-                  xMm: subClamped.xMm,
-                  yMm: subClamped.yMm,
-                };
-              }
-              return a;
-            }),
-          }
+        ? recomputeBoundWires(
+            {
+              ...s,
+              components: s.components.map((c) => {
+                if (c.id === id) {
+                  return {
+                    ...c,
+                    xMm: clamped.xMm,
+                    yMm: clamped.yMm,
+                    zMm: snapResult.zMm,
+                    railId: snapResult.railId,
+                  };
+                }
+                if (c.templateId === "tor" && c.mountedToComponentId === id) {
+                  return {
+                    ...c,
+                    xMm: clamped.xMm,
+                    yMm: clamped.yMm - comp.heightMm / 2 - c.heightMm / 2,
+                    zMm: snapResult.zMm,
+                    railId: null,
+                  };
+                }
+                if (comp.groupId && c.groupId === comp.groupId && !c.locked) {
+                  const subClamped = clampToBackplate(
+                    c.xMm + deltaX,
+                    c.yMm + deltaY,
+                    c.widthMm,
+                    c.heightMm,
+                    plateW,
+                    plateH
+                  );
+                  return {
+                    ...c,
+                    xMm: subClamped.xMm,
+                    yMm: subClamped.yMm,
+                  };
+                }
+                return c;
+              }),
+              cadAssets: s.cadAssets.map((a) => {
+                if (comp.groupId && a.groupId === comp.groupId && !a.locked) {
+                  const subClamped = clampToBackplate(
+                    a.xMm + deltaX,
+                    a.yMm + deltaY,
+                    a.boundingBoxMm.w,
+                    a.boundingBoxMm.h,
+                    plateW,
+                    plateH
+                  );
+                  return {
+                    ...a,
+                    xMm: subClamped.xMm,
+                    yMm: subClamped.yMm,
+                  };
+                }
+                return a;
+              }),
+            },
+            autoRouteDuctsEnabled,
+            movedIds
+          )
         : s
     );
     const active = updated.find((s) => s.id === activeSheetId)!;
@@ -2398,13 +3408,24 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
   removeComponent: (id) => {
     const { sheets, activeSheetId, selected, selectedIds } = get();
     pushHistory(sheets);
+    const activeSheet = sheets.find((s) => s.id === activeSheetId);
+    const removedIds = new Set<string>([id]);
+    if (activeSheet) {
+      for (const c of activeSheet.components) {
+        if (c.mountedToComponentId === id) {
+          removedIds.add(c.id);
+        }
+      }
+    }
     const updated = sheets.map((s) =>
       s.id === activeSheetId
         ? {
             ...s,
-            components: s.components.filter((c) => c.id !== id),
+            components: s.components.filter((c) => !removedIds.has(c.id)),
             wires: s.wires.filter(
-              (w) => w.fromComponentId !== id && w.toComponentId !== id
+              (w) =>
+                !removedIds.has(w.fromComponentId) &&
+                !removedIds.has(w.toComponentId)
             ),
           }
         : s
@@ -2412,8 +3433,8 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
     const active = updated.find((s) => s.id === activeSheetId)!;
     set({
       sheets: updated,
-      selected: selected?.id === id ? null : selected,
-      selectedIds: selectedIds.filter((s) => s.id !== id),
+      selected: selected && removedIds.has(selected.id) ? null : selected,
+      selectedIds: selectedIds.filter((s) => !removedIds.has(s.id)),
       canUndo: true,
       canRedo: false,
       ...syncActiveSheetProjection(active),
@@ -2437,19 +3458,23 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
   },
 
   rotateCadAsset: (id, deltaDeg = 90) => {
-    const { sheets, activeSheetId } = get();
+    const { sheets, activeSheetId, autoRouteDuctsEnabled } = get();
     pushHistory(sheets);
     const updated = sheets.map((s) =>
       s.id === activeSheetId
-        ? {
-            ...s,
-            cadAssets: s.cadAssets.map((a) => {
-              if (a.id !== id) return a;
-              const current = a.rotationDeg ?? 0;
-              const nextDeg = (((current + deltaDeg) % 360) + 360) % 360 as RotationDeg;
-              return { ...a, rotationDeg: nextDeg };
-            }),
-          }
+        ? recomputeBoundWires(
+            {
+              ...s,
+              cadAssets: s.cadAssets.map((a) => {
+                if (a.id !== id) return a;
+                const current = a.rotationDeg ?? 0;
+                const nextDeg = (((current + deltaDeg) % 360) + 360) % 360 as RotationDeg;
+                return { ...a, rotationDeg: nextDeg };
+              }),
+            },
+            autoRouteDuctsEnabled,
+            new Set([id])
+          )
         : s
     );
     const active = updated.find((s) => s.id === activeSheetId)!;
@@ -2668,6 +3693,10 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
             }),
           }
         : s
+    ).map((s) =>
+      s.id === activeSheetId
+        ? recomputeBoundWires(s, get().autoRouteDuctsEnabled, null)
+        : s
     );
     const active = updated.find((s) => s.id === activeSheetId)!;
     set({
@@ -2857,6 +3886,7 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
       gridSnapMm: params.gridSnapMm ?? get().gridSnapMm,
       autoRouteDuctsEnabled:
         params.autoRouteDuctsEnabled ?? get().autoRouteDuctsEnabled,
+      showPinLabels: params.showPinLabels ?? get().showPinLabels,
       selected: null,
       selectedIds: [],
       isPinMarkingMode: false,

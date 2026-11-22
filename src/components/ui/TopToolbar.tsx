@@ -20,8 +20,6 @@ import {
   Layers,
   Menu,
   Network,
-  PanelRightClose,
-  PanelRightOpen,
   Plus,
   Redo2,
   RotateCcw,
@@ -40,6 +38,7 @@ import {
   User as UserIcon,
 } from "lucide-react";
 import { clearAutoSaveSession } from "@/lib/indexed-db";
+import { Button, Dropdown, DropdownItem, DropdownSeparator } from "@/components/ui";
 import { useAuthStore } from "@/store/useAuthStore";
 import {
   parseAndValidatePflow,
@@ -66,15 +65,7 @@ function triggerDownload(filename: string, content: string, mime: string) {
   URL.revokeObjectURL(url);
 }
 
-interface TopToolbarProps {
-  inspectorOpen?: boolean;
-  onToggleInspector?: () => void;
-}
-
-export function TopToolbar({
-  inspectorOpen = true,
-  onToggleInspector,
-}: TopToolbarProps) {
+export function TopToolbar() {
   const viewportMode = usePanelStore((s) => s.viewportMode);
   const theme = usePanelStore((s) => s.theme);
   const toggleTheme = usePanelStore((s) => s.toggleTheme);
@@ -88,6 +79,7 @@ export function TopToolbar({
   const cadAssets = usePanelStore((s) => s.cadAssets);
   const wires = usePanelStore((s) => s.wires);
   const titleBlock = usePanelStore((s) => s.titleBlock);
+  const updateTitleBlock = usePanelStore((s) => s.updateTitleBlock);
 
   const sheets = usePanelStore((s) => s.sheets);
   const activeSheetId = usePanelStore((s) => s.activeSheetId);
@@ -117,7 +109,6 @@ export function TopToolbar({
   const addSheet = usePanelStore((s) => s.addSheet);
   const rightPanelTab = usePanelStore((s) => s.rightPanelTab);
   const setRightPanelTab = usePanelStore((s) => s.setRightPanelTab);
-  const setInspectorOpen = usePanelStore((s) => s.setInspectorOpen);
   const leftSidebarOpen = usePanelStore((s) => s.leftSidebarOpen);
   const toggleLeftSidebar = usePanelStore((s) => s.toggleLeftSidebar);
 
@@ -127,7 +118,6 @@ export function TopToolbar({
   const logout = useAuthStore((s) => s.logout);
   const syncStatus = useAuthStore((s) => s.syncStatus);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
-  const accountMenuRef = useRef<HTMLDivElement>(null);
 
   const [activeMenu, setActiveMenu] = useState<"file" | "edit" | "view" | "mobile" | null>(
     null
@@ -146,12 +136,6 @@ export function TopToolbar({
         !menuBarRef.current.contains(e.target as Node)
       ) {
         setActiveMenu(null);
-      }
-      if (
-        accountMenuRef.current &&
-        !accountMenuRef.current.contains(e.target as Node)
-      ) {
-        setAccountMenuOpen(false);
       }
     };
     window.addEventListener("mousedown", handleDown);
@@ -425,69 +409,82 @@ export function TopToolbar({
   };
 
   const dropdownPanelClass =
-    "absolute top-9 left-0 z-50 rounded-xl border border-[#e2e8f0] dark:border-white/10 bg-white/98 dark:bg-[#111318]/98 p-1.5 shadow-xl dark:shadow-2xl backdrop-blur-xl text-[13px]";
+    "absolute top-full mt-1 left-0 z-50 rounded-xl border border-[#e2e8f0] dark:border-white/10 bg-white/98 dark:bg-[#111318]/98 p-1.5 shadow-xl dark:shadow-2xl backdrop-blur-xl text-xs before:content-[''] before:absolute before:-top-2 before:inset-x-0 before:h-2";
   const dropdownItemClass =
     "flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-white/10 hover:text-[#0f172a] dark:hover:text-white";
   const dropdownSectionLabelClass =
-    "px-2.5 py-1 text-[11px] font-mono uppercase tracking-wider text-[#64748b] dark:text-slate-500 font-medium";
+    "px-2.5 py-1 text-[11px] font-sans uppercase tracking-wider text-[#64748b] dark:text-slate-500 font-medium";
   const dropdownDividerClass = "my-1 border-t border-[#e2e8f0] dark:border-white/10";
+  const monoIconClass = "text-slate-600 dark:text-slate-400";
+
+  const renderTooltip = (label: string, align: "center" | "right" = "center") => (
+    <span
+      role="tooltip"
+      className={`pointer-events-none absolute top-full mt-2 z-50 whitespace-nowrap rounded-lg border px-2 py-1 text-[11px] font-medium opacity-0 scale-95 transition-all duration-100 group-hover/tip:opacity-100 group-hover/tip:scale-100 shadow-xl ${
+        align === "right" ? "right-0" : "left-1/2 -translate-x-1/2"
+      } bg-slate-900 text-slate-100 border-slate-800 dark:bg-[#161922] dark:text-zinc-200 dark:border-white/15`}
+    >
+      {label}
+    </span>
+  );
 
   return (
-    <header className="relative z-40 flex h-14 shrink-0 items-center justify-between border-b border-[#e2e8f0] dark:border-white/10 bg-white/95 dark:bg-[#0c0e14]/95 px-2.5 sm:px-4 text-xs text-[#0f172a] dark:text-slate-200 shadow-sm dark:shadow-none backdrop-blur-xl select-none">
-      {/* LEFT SECTION: Logo Badge + Brand + File/Edit/View Menus */}
-      <div className="flex items-center gap-2 sm:gap-3.5" ref={menuBarRef}>
+    <header className="relative z-50 flex h-14 shrink-0 items-center justify-between border-b border-slate-200 dark:border-white/10 bg-white/95 dark:bg-[#0c0e14]/95 px-3 sm:px-4 text-xs text-slate-800 dark:text-white shadow-sm dark:shadow-none backdrop-blur-xl select-none transition-colors duration-150">
+      {/* LEFT SECTION: Branding + File/Edit/View Menubar + Project Pill (RelayTest style) */}
+      <div className="flex items-center gap-2 sm:gap-3" ref={menuBarRef}>
         {/* Mobile Parts Drawer Toggle Button */}
-        <button
-          type="button"
-          onClick={toggleLeftSidebar}
-          aria-label={leftSidebarOpen ? "Close Parts Drawer" : "Open Parts Drawer"}
-          title={leftSidebarOpen ? "Close Parts Drawer" : "Open Parts Drawer"}
-          className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-all md:hidden ${
-            leftSidebarOpen
-              ? "border-sky-300 dark:border-sky-500/40 bg-sky-50 dark:bg-sky-500/15 text-sky-600 dark:text-sky-400"
-              : "border-[#e2e8f0] dark:border-white/10 bg-[#f8fafc] dark:bg-[#171a21] text-[#64748b] dark:text-slate-400 hover:text-[#0f172a] dark:hover:text-white"
-          }`}
-        >
-          <Cpu className="h-4 w-4" />
-        </button>
-
-        {/* Brand Badge */}
-        <div className="flex items-center gap-1.5 sm:gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#e2e8f0] dark:border-white/15 bg-[#f8fafc] dark:bg-[#171a21] shadow-xs">
-            <Zap className="h-4.5 w-4.5 text-amber-500 dark:text-amber-400 fill-amber-400/20" />
-          </div>
-          <div className="flex items-center gap-1.5 font-bold tracking-tight text-[#0f172a] dark:text-white text-[14px] sm:text-[15px]">
-            <span>PanelFlow</span>
-            <span className="hidden sm:inline-block rounded-md border border-[#e2e8f0] dark:border-white/10 bg-[#f1f5f9] dark:bg-white/5 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-[#64748b] dark:text-slate-400">
-              CAD
-            </span>
-          </div>
+        <div className="relative group/tip md:hidden">
+          <button
+            type="button"
+            onClick={toggleLeftSidebar}
+            aria-label={leftSidebarOpen ? "Close Parts Drawer" : "Open Parts Drawer"}
+            className={`p-2 rounded-xl transition-colors cursor-pointer ${
+              leftSidebarOpen
+                ? "bg-slate-900 text-white dark:bg-white dark:text-black"
+                : "bg-white hover:bg-slate-100 text-slate-800 dark:bg-[#131620] dark:hover:bg-[#1c202e] dark:text-zinc-200 dark:hover:text-white"
+            }`}
+          >
+            <Cpu className="h-4 w-4" />
+          </button>
+          {renderTooltip(leftSidebarOpen ? "Close Parts" : "Parts & Library")}
         </div>
 
+        {/* Branding Logo + Name */}
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 bg-slate-100 border-slate-200 text-slate-900 dark:bg-zinc-800 dark:border-zinc-700 dark:text-white">
+            <Zap className="h-4 w-4" />
+          </div>
+          <span className="font-bold tracking-tight text-base hidden sm:inline text-slate-900 dark:text-white">
+            PanelFlow
+          </span>
+        </div>
+
+        <div className="hidden md:block h-4 w-[1px] mx-1 bg-slate-300 dark:bg-white/15" />
+
         {/* Mobile Hamburger / Quick Actions Menu */}
-        <div className="relative md:hidden">
+        <div className="relative group/tip md:hidden">
           <button
             type="button"
             onClick={() =>
               setActiveMenu(activeMenu === "mobile" ? null : "mobile")
             }
-            aria-label="Open Mobile Menu"
-            className={`flex h-8 items-center gap-1 rounded-lg border px-2 text-xs font-medium transition-colors ${
+            aria-label="Menu"
+            className={`p-2 rounded-xl transition-colors cursor-pointer ${
               activeMenu === "mobile"
-                ? "border-sky-400 bg-sky-50 dark:bg-white/10 text-sky-600 dark:text-white"
-                : "border-[#e2e8f0] dark:border-white/10 bg-[#f8fafc] dark:bg-[#171a21] text-[#64748b] dark:text-slate-400"
+                ? "bg-slate-900 text-white dark:bg-white dark:text-black"
+                : "bg-white hover:bg-slate-100 text-slate-800 dark:bg-[#131620] dark:hover:bg-[#1c202e] dark:text-zinc-200 dark:hover:text-white"
             }`}
           >
             <Menu className="h-4 w-4" />
-            <span className="font-mono text-[11px]">Menu</span>
           </button>
+          {activeMenu !== "mobile" && renderTooltip("Menu")}
 
           {activeMenu === "mobile" && (
             <div className="absolute top-10 left-0 z-50 w-72 max-h-[80vh] overflow-y-auto rounded-xl border border-[#e2e8f0] dark:border-white/10 bg-white/98 dark:bg-[#111318]/98 p-2 shadow-2xl backdrop-blur-xl text-xs">
-              <div className="px-2 py-1 text-[11px] font-mono uppercase tracking-wider text-[#64748b] dark:text-slate-500 font-medium">
+              <div className="px-2 py-1 text-[11px] font-sans uppercase tracking-wider text-[#64748b] dark:text-slate-500 font-medium">
                 Active Project
               </div>
-              <div className="mb-2 px-2 py-1 font-mono text-xs text-[#0f172a] dark:text-slate-200 truncate">
+              <div className="mb-2 px-2 py-1 font-sans text-xs text-[#0f172a] dark:text-slate-200 truncate">
                 {titleBlock.projectName}
               </div>
               <div className={dropdownDividerClass} />
@@ -501,7 +498,7 @@ export function TopToolbar({
                 }}
                 className={dropdownItemClass}
               >
-                <Save className="h-4 w-4 text-emerald-500" />
+                <Save className={`h-4 w-4 ${monoIconClass}`} />
                 Save Project (.pflow)
               </button>
               <button
@@ -512,7 +509,7 @@ export function TopToolbar({
                 }}
                 className={dropdownItemClass}
               >
-                <FolderOpen className="h-4 w-4 text-amber-500" />
+                <FolderOpen className={`h-4 w-4 ${monoIconClass}`} />
                 Open .pflow Project...
               </button>
               <button
@@ -523,7 +520,7 @@ export function TopToolbar({
                 }}
                 className={dropdownItemClass}
               >
-                <RotateCcw className="h-4 w-4 text-rose-500" />
+                <RotateCcw className={`h-4 w-4 ${monoIconClass}`} />
                 New Project (Reset)
               </button>
               <button
@@ -534,7 +531,7 @@ export function TopToolbar({
                 }}
                 className={dropdownItemClass}
               >
-                <Plus className="h-4 w-4 text-sky-500" />
+                <Plus className={`h-4 w-4 ${monoIconClass}`} />
                 New Mounting Sheet
               </button>
 
@@ -549,7 +546,7 @@ export function TopToolbar({
                 }}
                 className={dropdownItemClass}
               >
-                <Copy className="h-4 w-4 text-cyan-500" />
+                <Copy className={`h-4 w-4 ${monoIconClass}`} />
                 Copy
               </button>
               <button
@@ -561,7 +558,7 @@ export function TopToolbar({
                 }}
                 className={dropdownItemClass}
               >
-                <Copy className="h-4 w-4 text-emerald-500" />
+                <Copy className={`h-4 w-4 ${monoIconClass}`} />
                 Paste
               </button>
               <button
@@ -573,7 +570,7 @@ export function TopToolbar({
                 }}
                 className={dropdownItemClass}
               >
-                <Undo2 className="h-4 w-4" />
+                <Undo2 className={`h-4 w-4 ${monoIconClass}`} />
                 Undo
               </button>
               <button
@@ -585,7 +582,7 @@ export function TopToolbar({
                 }}
                 className={dropdownItemClass}
               >
-                <Redo2 className="h-4 w-4" />
+                <Redo2 className={`h-4 w-4 ${monoIconClass}`} />
                 Redo
               </button>
               <button
@@ -597,7 +594,7 @@ export function TopToolbar({
                 }}
                 className={dropdownItemClass}
               >
-                <Network className="h-4 w-4 text-sky-500" />
+                <Network className={`h-4 w-4 ${monoIconClass}`} />
                 Auto-Route All Wires
               </button>
               <button
@@ -609,7 +606,7 @@ export function TopToolbar({
                 }}
                 className={dropdownItemClass}
               >
-                <Hash className="h-4 w-4 text-emerald-500" />
+                <Hash className={`h-4 w-4 ${monoIconClass}`} />
                 Auto-Number Wires
               </button>
 
@@ -623,7 +620,7 @@ export function TopToolbar({
                 }}
                 className={dropdownItemClass}
               >
-                <Download className="h-4 w-4 text-sky-500" />
+                <Download className={`h-4 w-4 ${monoIconClass}`} />
                 Export 2D SVG
               </button>
               <button
@@ -634,7 +631,7 @@ export function TopToolbar({
                 }}
                 className={dropdownItemClass}
               >
-                <FileImage className="h-4 w-4 text-emerald-500" />
+                <FileImage className={`h-4 w-4 ${monoIconClass}`} />
                 Export High-Res PNG
               </button>
               <button
@@ -645,7 +642,7 @@ export function TopToolbar({
                 }}
                 className={dropdownItemClass}
               >
-                <Download className="h-4 w-4 text-indigo-500" />
+                <Download className={`h-4 w-4 ${monoIconClass}`} />
                 {activeSheetType === "door-cutout"
                   ? "Export Door Drilling DXF (1:1)"
                   : "Export Drilling DXF"}
@@ -661,7 +658,7 @@ export function TopToolbar({
                       key={u}
                       type="button"
                       onClick={() => setDisplayUnit(u)}
-                      className={`px-2 py-0.5 rounded text-[11px] font-mono ${
+                      className={`px-2 py-0.5 rounded text-[11px] font-sans ${
                         displayUnit === u
                           ? "bg-[#0f172a] text-white dark:bg-white dark:text-black font-bold"
                           : "text-[#64748b] dark:text-slate-400"
@@ -682,12 +679,12 @@ export function TopToolbar({
               >
                 {theme === "dark" ? (
                   <>
-                    <Sun className="h-4 w-4 text-amber-400" />
+                    <Sun className={`h-4 w-4 ${monoIconClass}`} />
                     Switch to Light Mode
                   </>
                 ) : (
                   <>
-                    <Moon className="h-4 w-4 text-[#0f172a]" />
+                    <Moon className={`h-4 w-4 ${monoIconClass}`} />
                     Switch to Dark Mode
                   </>
                 )}
@@ -696,25 +693,27 @@ export function TopToolbar({
           )}
         </div>
 
-        <div className="hidden h-4 w-px bg-[#e2e8f0] dark:bg-white/10 md:block" />
-
-        {/* Dropdown Menus (RelayFlow style) */}
-        <div className="hidden items-center gap-1 md:flex">
+        {/* Menubar (File, Edit, View) - RelayTest style */}
+        <nav className="hidden items-center gap-0.5 text-xs font-medium md:flex">
           {/* FILE MENU */}
-          <div className="relative">
+          <div
+            className="relative"
+            onMouseEnter={() => setActiveMenu("file")}
+            onMouseLeave={() => setActiveMenu((prev) => (prev === "file" ? null : prev))}
+          >
             <button
               type="button"
               onClick={() =>
                 setActiveMenu(activeMenu === "file" ? null : "file")
               }
-              className={`flex items-center gap-1 rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors ${
+              className={`px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-1 cursor-pointer ${
                 activeMenu === "file"
-                  ? "bg-[#e2e8f0] dark:bg-white/10 text-[#0f172a] dark:text-white"
-                  : "text-[#64748b] dark:text-slate-400 hover:bg-[#f1f5f9] dark:hover:bg-white/5 hover:text-[#0f172a] dark:hover:text-slate-200"
+                  ? "bg-slate-100 text-slate-900 dark:bg-white/15 dark:text-white"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-zinc-300 dark:hover:text-white dark:hover:bg-white/5"
               }`}
             >
-              File
-              <ChevronDown className="h-3.5 w-3.5 text-[#64748b] dark:text-slate-500" />
+              <span>File</span>
+              <ChevronDown className="h-3 w-3 opacity-60" />
             </button>
 
             {activeMenu === "file" && (
@@ -730,7 +729,7 @@ export function TopToolbar({
                   }}
                   className={dropdownItemClass}
                 >
-                  <RotateCcw className="h-3.5 w-3.5 text-rose-500 dark:text-rose-400" />
+                  <RotateCcw className={`h-3.5 w-3.5 ${monoIconClass}`} />
                   New Project (Reset to Default)
                 </button>
                 <button
@@ -742,10 +741,10 @@ export function TopToolbar({
                   className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-white/10 hover:text-[#0f172a] dark:hover:text-white"
                 >
                   <span className="flex items-center gap-2">
-                    <FolderOpen className="h-3.5 w-3.5 text-amber-500 dark:text-amber-400" />
+                    <FolderOpen className={`h-3.5 w-3.5 ${monoIconClass}`} />
                     Open .pflow Project...
                   </span>
-                  <span className="font-mono text-[11px] text-[#64748b] dark:text-slate-500">
+                  <span className="font-sans text-[11px] text-[#64748b] dark:text-slate-500">
                     Ctrl+O
                   </span>
                 </button>
@@ -758,10 +757,10 @@ export function TopToolbar({
                   className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-white/10 hover:text-[#0f172a] dark:hover:text-white"
                 >
                   <span className="flex items-center gap-2">
-                    <Save className="h-3.5 w-3.5 text-emerald-500 dark:text-emerald-400" />
+                    <Save className={`h-3.5 w-3.5 ${monoIconClass}`} />
                     Save Project (.pflow)
                   </span>
-                  <span className="font-mono text-[11px] text-[#64748b] dark:text-slate-500">
+                  <span className="font-sans text-[11px] text-[#64748b] dark:text-slate-500">
                     Ctrl+S
                   </span>
                 </button>
@@ -777,24 +776,23 @@ export function TopToolbar({
                   }}
                   className={dropdownItemClass}
                 >
-                  <Plus className="h-3.5 w-3.5 text-sky-500 dark:text-sky-400" />
+                  <Plus className={`h-3.5 w-3.5 ${monoIconClass}`} />
                   New Mounting Sheet
                 </button>
                 <div className={dropdownDividerClass} />
                 <div className={dropdownSectionLabelClass}>
-                  Manufacturing & BOM
+                  Manufacturing &amp; BOM
                 </div>
                 <button
                   type="button"
                   onClick={() => {
-                    setInspectorOpen(true);
                     setRightPanelTab("bom");
                     setActiveMenu(null);
                   }}
                   className={dropdownItemClass}
                 >
-                  <ClipboardList className="h-3.5 w-3.5 text-sky-500 dark:text-sky-400" />
-                  BOM & Wire Cutting Schedule...
+                  <ClipboardList className={`h-3.5 w-3.5 ${monoIconClass}`} />
+                  BOM &amp; Wire Cutting Schedule...
                 </button>
                 <div className={dropdownDividerClass} />
                 <div className={dropdownSectionLabelClass}>
@@ -808,7 +806,7 @@ export function TopToolbar({
                   }}
                   className={dropdownItemClass}
                 >
-                  <Download className="h-3.5 w-3.5 text-sky-500 dark:text-sky-400" />
+                  <Download className={`h-3.5 w-3.5 ${monoIconClass}`} />
                   Export 2D SVG
                 </button>
                 <button
@@ -819,7 +817,7 @@ export function TopToolbar({
                   }}
                   className={dropdownItemClass}
                 >
-                  <FileImage className="h-3.5 w-3.5 text-emerald-500 dark:text-emerald-400" />
+                  <FileImage className={`h-3.5 w-3.5 ${monoIconClass}`} />
                   Export High-Res PNG
                 </button>
                 <button
@@ -830,7 +828,7 @@ export function TopToolbar({
                   }}
                   className={dropdownItemClass}
                 >
-                  <FileText className="h-3.5 w-3.5 text-amber-500 dark:text-amber-400" />
+                  <FileText className={`h-3.5 w-3.5 ${monoIconClass}`} />
                   Print / Export PDF
                 </button>
                 <div className={dropdownDividerClass} />
@@ -847,7 +845,7 @@ export function TopToolbar({
                   }}
                   className={dropdownItemClass}
                 >
-                  <Download className="h-3.5 w-3.5 text-indigo-500 dark:text-indigo-400" />
+                  <Download className={`h-3.5 w-3.5 ${monoIconClass}`} />
                   {activeSheetType === "door-cutout"
                     ? "Export Door Drilling DXF (1:1)"
                     : "Export Drilling DXF (1:1)"}
@@ -860,7 +858,7 @@ export function TopToolbar({
                   }}
                   className={dropdownItemClass}
                 >
-                  <Download className="h-3.5 w-3.5 text-teal-500 dark:text-teal-400" />
+                  <Download className={`h-3.5 w-3.5 ${monoIconClass}`} />
                   {activeSheetType === "door-cutout"
                     ? "Export Door Drilling Template SVG (1:1)"
                     : "Export Drilling SVG (1:1)"}
@@ -870,20 +868,24 @@ export function TopToolbar({
           </div>
 
           {/* EDIT MENU */}
-          <div className="relative">
+          <div
+            className="relative"
+            onMouseEnter={() => setActiveMenu("edit")}
+            onMouseLeave={() => setActiveMenu((prev) => (prev === "edit" ? null : prev))}
+          >
             <button
               type="button"
               onClick={() =>
                 setActiveMenu(activeMenu === "edit" ? null : "edit")
               }
-              className={`flex items-center gap-1 rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors ${
+              className={`px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-1 cursor-pointer ${
                 activeMenu === "edit"
-                  ? "bg-[#e2e8f0] dark:bg-white/10 text-[#0f172a] dark:text-white"
-                  : "text-[#64748b] dark:text-slate-400 hover:bg-[#f1f5f9] dark:hover:bg-white/5 hover:text-[#0f172a] dark:hover:text-slate-200"
+                  ? "bg-slate-100 text-slate-900 dark:bg-white/15 dark:text-white"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-zinc-300 dark:hover:text-white dark:hover:bg-white/5"
               }`}
             >
-              Edit
-              <ChevronDown className="h-3.5 w-3.5 text-[#64748b] dark:text-slate-500" />
+              <span>Edit</span>
+              <ChevronDown className="h-3 w-3 opacity-60" />
             </button>
 
             {activeMenu === "edit" && (
@@ -898,10 +900,10 @@ export function TopToolbar({
                   className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-white/10 hover:text-[#0f172a] dark:hover:text-white disabled:opacity-40"
                 >
                   <span className="flex items-center gap-2">
-                    <Copy className="h-3.5 w-3.5 text-cyan-500" />
+                    <Copy className={`h-3.5 w-3.5 ${monoIconClass}`} />
                     Copy
                   </span>
-                  <span className="font-mono text-[11px] text-[#64748b] dark:text-slate-500">
+                  <span className="font-sans text-[11px] text-[#64748b] dark:text-slate-500">
                     Ctrl+C
                   </span>
                 </button>
@@ -915,10 +917,10 @@ export function TopToolbar({
                   className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-white/10 hover:text-[#0f172a] dark:hover:text-white disabled:opacity-40"
                 >
                   <span className="flex items-center gap-2">
-                    <Copy className="h-3.5 w-3.5 text-emerald-500" />
+                    <Copy className={`h-3.5 w-3.5 ${monoIconClass}`} />
                     Paste
                   </span>
-                  <span className="font-mono text-[11px] text-[#64748b] dark:text-slate-500">
+                  <span className="font-sans text-[11px] text-[#64748b] dark:text-slate-500">
                     Ctrl+V
                   </span>
                 </button>
@@ -933,10 +935,10 @@ export function TopToolbar({
                   className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-white/10 hover:text-[#0f172a] dark:hover:text-white disabled:opacity-40"
                 >
                   <span className="flex items-center gap-2">
-                    <Undo2 className="h-3.5 w-3.5" />
+                    <Undo2 className={`h-3.5 w-3.5 ${monoIconClass}`} />
                     Undo
                   </span>
-                  <span className="font-mono text-[11px] text-[#64748b] dark:text-slate-500">
+                  <span className="font-sans text-[11px] text-[#64748b] dark:text-slate-500">
                     Ctrl+Z
                   </span>
                 </button>
@@ -950,10 +952,10 @@ export function TopToolbar({
                   className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-white/10 hover:text-[#0f172a] dark:hover:text-white disabled:opacity-40"
                 >
                   <span className="flex items-center gap-2">
-                    <Redo2 className="h-3.5 w-3.5" />
+                    <Redo2 className={`h-3.5 w-3.5 ${monoIconClass}`} />
                     Redo
                   </span>
-                  <span className="font-mono text-[11px] text-[#64748b] dark:text-slate-500">
+                  <span className="font-sans text-[11px] text-[#64748b] dark:text-slate-500">
                     Ctrl+Y
                   </span>
                 </button>
@@ -968,7 +970,7 @@ export function TopToolbar({
                   className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-white/10 hover:text-[#0f172a] dark:hover:text-white disabled:opacity-40"
                 >
                   <span className="flex items-center gap-2">
-                    <Network className="h-3.5 w-3.5 text-sky-500" />
+                    <Network className={`h-3.5 w-3.5 ${monoIconClass}`} />
                     Auto-Route All Wires via Ducts
                   </span>
                 </button>
@@ -982,10 +984,10 @@ export function TopToolbar({
                   className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-white/10 hover:text-[#0f172a] dark:hover:text-white disabled:opacity-40"
                 >
                   <span className="flex items-center gap-2">
-                    <Hash className="h-3.5 w-3.5 text-emerald-500" />
+                    <Hash className={`h-3.5 w-3.5 ${monoIconClass}`} />
                     Auto-Number Wires
                   </span>
-                  <span className="font-mono text-[11px] text-[#64748b] dark:text-slate-500">
+                  <span className="font-sans text-[11px] text-[#64748b] dark:text-slate-500">
                     Ctrl+Shift+N
                   </span>
                 </button>
@@ -994,20 +996,24 @@ export function TopToolbar({
           </div>
 
           {/* VIEW MENU */}
-          <div className="relative">
+          <div
+            className="relative"
+            onMouseEnter={() => setActiveMenu("view")}
+            onMouseLeave={() => setActiveMenu((prev) => (prev === "view" ? null : prev))}
+          >
             <button
               type="button"
               onClick={() =>
                 setActiveMenu(activeMenu === "view" ? null : "view")
               }
-              className={`flex items-center gap-1 rounded-md px-3 py-1.5 text-[13px] font-medium transition-colors ${
+              className={`px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-1 cursor-pointer ${
                 activeMenu === "view"
-                  ? "bg-[#e2e8f0] dark:bg-white/10 text-[#0f172a] dark:text-white"
-                  : "text-[#64748b] dark:text-slate-400 hover:bg-[#f1f5f9] dark:hover:bg-white/5 hover:text-[#0f172a] dark:hover:text-slate-200"
+                  ? "bg-slate-100 text-slate-900 dark:bg-white/15 dark:text-white"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-zinc-300 dark:hover:text-white dark:hover:bg-white/5"
               }`}
             >
-              View
-              <ChevronDown className="h-3.5 w-3.5 text-[#64748b] dark:text-slate-500" />
+              <span>View</span>
+              <ChevronDown className="h-3 w-3 opacity-60" />
             </button>
 
             {activeMenu === "view" && (
@@ -1021,7 +1027,7 @@ export function TopToolbar({
                   className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-white/10 hover:text-[#0f172a] dark:hover:text-white"
                 >
                   <span className="flex items-center gap-2">
-                    <Layers className="h-3.5 w-3.5" />
+                    <Layers className={`h-3.5 w-3.5 ${monoIconClass}`} />
                     2D Layout
                   </span>
                   {viewportMode === "2d" && (
@@ -1037,7 +1043,7 @@ export function TopToolbar({
                   className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-left text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-white/10 hover:text-[#0f172a] dark:hover:text-white"
                 >
                   <span className="flex items-center gap-2">
-                    <Box className="h-3.5 w-3.5" />
+                    <Box className={`h-3.5 w-3.5 ${monoIconClass}`} />
                     3D View
                   </span>
                   {viewportMode === "3d" && (
@@ -1067,63 +1073,78 @@ export function TopToolbar({
               </div>
             )}
           </div>
-        </div>
+        </nav>
 
-        {/* Active Project Pill (RelayFlow parity: left section after File/Edit/View) */}
-        <div className="hidden items-center gap-2 rounded-full border border-[#e2e8f0] dark:border-white/10 bg-[#f8fafc] dark:bg-[#171a21] px-3.5 py-1.5 font-mono text-xs md:flex">
-          <FileCode2 className="h-3.5 w-3.5 shrink-0 text-[#64748b] dark:text-slate-400" />
-          <span className="max-w-[260px] lg:max-w-[340px] truncate text-[#334155] dark:text-slate-300 font-medium">
-            {titleBlock.projectName}
-          </span>
-          <span className="shrink-0 rounded-md border border-[#e2e8f0] dark:border-white/10 bg-[#e2e8f0]/70 dark:bg-white/10 px-1.5 py-0.5 font-mono text-[10px] font-bold tracking-wider text-[#0f172a] dark:text-slate-200">
+        {/* Active Project Pill (Editable, regular typeface) */}
+        <div className="hidden md:flex items-center gap-2 rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-[#131620] px-3 py-1 text-xs transition-colors focus-within:border-slate-400 dark:focus-within:border-white/25">
+          <FileCode2 className={`h-3.5 w-3.5 shrink-0 ${monoIconClass}`} />
+          <input
+            type="text"
+            value={titleBlock.projectName}
+            onChange={(e) => updateTitleBlock({ projectName: e.target.value })}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === "Escape") {
+                e.currentTarget.blur();
+              }
+            }}
+            aria-label="Project Name"
+            placeholder="Untitled Project"
+            className="w-36 lg:w-48 bg-transparent text-xs font-normal text-slate-700 dark:text-zinc-200 placeholder:text-slate-400 dark:placeholder:text-zinc-500 focus:outline-none truncate"
+          />
+          <span className="shrink-0 rounded-md bg-slate-100 dark:bg-white/10 px-1.5 py-0.5 text-[10px] font-medium tracking-wider text-slate-600 dark:text-zinc-300">
             .PFLOW
           </span>
         </div>
       </div>
 
-      {/* RIGHT SECTION: Viewport Switcher + Unit Switcher + BOM Report + Theme Toggle + Inspector Toggle */}
-      <div className="flex items-center gap-1.5 sm:gap-2.5">
-        {/* Viewport Switcher Pill: [2D Layout] / [3D View] */}
-        <div className="flex items-center rounded-full border border-[#e2e8f0] dark:border-white/10 bg-[#f1f5f9] dark:bg-[#171a21] p-0.5 shadow-inner">
-          <button
-            type="button"
-            onClick={() => setViewportMode("2d")}
-            className={`flex items-center gap-1 sm:gap-1.5 rounded-full px-2.5 sm:px-3.5 py-1 sm:py-1.5 text-xs font-medium transition-all ${
-              viewportMode === "2d"
-                ? "bg-[#0f172a] text-white dark:bg-white dark:text-black font-semibold shadow-xs"
-                : "text-[#64748b] dark:text-slate-400 hover:text-[#0f172a] dark:hover:text-slate-200"
-            }`}
-          >
-            <Layers className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">2D Layout</span>
-            <span className="sm:hidden text-[11px]">2D</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewportMode("3d")}
-            className={`flex items-center gap-1 sm:gap-1.5 rounded-full px-2.5 sm:px-3.5 py-1 sm:py-1.5 text-xs font-medium transition-all ${
-              viewportMode === "3d"
-                ? "bg-[#0f172a] text-white dark:bg-white dark:text-black font-semibold shadow-xs"
-                : "text-[#64748b] dark:text-slate-400 hover:text-[#0f172a] dark:hover:text-slate-200"
-            }`}
-          >
-            <Box className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">3D View</span>
-            <span className="sm:hidden text-[11px]">3D</span>
-          </button>
+      {/* RIGHT SECTION: Borderless, Shadowless Monochrome Icon-Only Controls (RelayTest style) */}
+      <div className="flex items-center gap-1 sm:gap-1.5">
+        {/* Viewport Switcher Group: [2D] / [3D] */}
+        <div className="flex items-center gap-0.5 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-100/80 dark:bg-[#131620] p-0.5">
+          <div className="relative group/tip">
+            <button
+              type="button"
+              aria-label="2D Layout"
+              onClick={() => setViewportMode("2d")}
+              className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                viewportMode === "2d"
+                  ? "bg-slate-900 text-white dark:bg-white dark:text-black shadow-xs"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-white/70 dark:text-zinc-400 dark:hover:text-white dark:hover:bg-white/10"
+              }`}
+            >
+              <Layers className="h-3.5 w-3.5" />
+            </button>
+            {renderTooltip("2D Layout")}
+          </div>
+          <div className="relative group/tip">
+            <button
+              type="button"
+              aria-label="3D View"
+              onClick={() => setViewportMode("3d")}
+              className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                viewportMode === "3d"
+                  ? "bg-slate-900 text-white dark:bg-white dark:text-black shadow-xs"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-white/70 dark:text-zinc-400 dark:hover:text-white dark:hover:bg-white/10"
+              }`}
+            >
+              <Box className="h-3.5 w-3.5" />
+            </button>
+            {renderTooltip("3D View")}
+          </div>
         </div>
 
-        {/* Unit Switcher Pill (mm/cm/m) - Desktop only (in mobile drawer menu) */}
-        <div className="hidden sm:flex items-center rounded-full border border-[#e2e8f0] dark:border-white/10 bg-[#f1f5f9] dark:bg-[#171a21] p-0.5">
+        {/* Unit Switcher Group (mm/cm/m) */}
+        <div className="hidden sm:flex items-center gap-0.5 rounded-xl border border-slate-200 dark:border-white/10 bg-slate-100/80 dark:bg-[#131620] p-0.5">
           {units.map((u) => (
             <button
               key={u}
               type="button"
               onClick={() => setDisplayUnit(u)}
-              className={`rounded-full px-2.5 py-1 font-mono text-xs transition-all ${
+              title={`Display unit: ${u}`}
+              className={`rounded-lg px-2 py-1 font-sans text-xs transition-colors cursor-pointer ${
                 displayUnit === u
-                  ? "bg-[#0f172a] text-white dark:bg-white dark:text-black font-bold shadow-xs"
-                  : "text-[#475569] dark:text-slate-400 hover:text-[#0f172a] dark:hover:text-slate-200 font-medium"
+                  ? "bg-slate-900 text-white dark:bg-white dark:text-black font-semibold shadow-xs"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-white/70 dark:text-zinc-400 dark:hover:text-white dark:hover:bg-white/10 font-medium"
               }`}
             >
               {u}
@@ -1131,163 +1152,108 @@ export function TopToolbar({
           ))}
         </div>
 
-        {/* Auto-Number Wires Toolbar Button */}
-        <button
-          type="button"
-          disabled={wires.length === 0}
-          onClick={() => autoNumberWires()}
-          aria-label="Auto-Number Wires (Ctrl+Shift+N)"
-          title="Auto-Number Wires (Ctrl+Shift+N)"
-          className="flex h-8 items-center gap-1 sm:gap-1.5 rounded-full border border-[#e2e8f0] dark:border-white/10 bg-white dark:bg-[#171a21] px-2 sm:px-3 text-xs font-medium text-[#334155] dark:text-slate-200 shadow-xs dark:shadow-none hover:bg-[#f1f5f9] dark:hover:bg-white/10 hover:text-[#0f172a] dark:hover:text-white disabled:opacity-40"
-        >
-          <Hash className="h-3.5 w-3.5 text-emerald-500" />
-          <span className="hidden lg:inline">Auto-Number</span>
-        </button>
-
-        {/* BOM & Wire List Quick Button */}
-        <button
-          type="button"
-          onClick={() => {
-            setInspectorOpen(true);
-            setRightPanelTab("bom");
-          }}
-          aria-label="BOM & Wire Cutting Schedule"
-          title="BOM & Wire Cutting Schedule"
-          className={`flex h-8 items-center gap-1 sm:gap-1.5 rounded-full border px-2 sm:px-3 text-xs font-medium transition-all ${
-            inspectorOpen && rightPanelTab === "bom"
-              ? "border-sky-300 dark:border-sky-500/40 bg-sky-50 dark:bg-sky-500/15 text-sky-700 dark:text-sky-300 shadow-xs"
-              : "border-[#e2e8f0] dark:border-white/10 bg-white dark:bg-[#171a21] text-[#334155] dark:text-slate-200 shadow-xs dark:shadow-none hover:bg-[#f1f5f9] dark:hover:bg-white/10 hover:text-[#0f172a] dark:hover:text-white"
-          }`}
-        >
-          <ClipboardList className="h-3.5 w-3.5 text-sky-500 dark:text-sky-400" />
-          <span className="hidden md:inline">BOM</span>
-        </button>
-
-        {/* Theme Toggle Button (Sun / Moon) - desktop only in toolbar, mobile has it in menu */}
-        <button
-          type="button"
-          onClick={toggleTheme}
-          aria-label={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
-          title={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
-          className="hidden sm:flex h-8 w-8 items-center justify-center rounded-full border border-[#e2e8f0] dark:border-white/10 bg-white dark:bg-[#171a21] text-[#64748b] dark:text-slate-400 shadow-xs dark:shadow-none transition-all hover:bg-[#f1f5f9] dark:hover:bg-white/10 hover:text-[#0f172a] dark:hover:text-white"
-        >
-          {theme === "dark" ? (
-            <Sun className="h-3.5 w-3.5 text-amber-400" />
-          ) : (
-            <Moon className="h-3.5 w-3.5 text-[#0f172a]" />
-          )}
-        </button>
-
-        {/* Toggle Inspector Button */}
-        {onToggleInspector && (
+        {/* Auto-Number Wires Icon Button (Borderless) */}
+        <div className="relative group/tip">
           <button
             type="button"
-            onClick={onToggleInspector}
-            className={`flex h-8 w-8 items-center justify-center rounded-full border transition-all ${
-              inspectorOpen
-                ? "border-[#cbd5e1] dark:border-white/20 bg-[#e2e8f0] dark:bg-white/10 text-[#0f172a] dark:text-white"
-                : "border-[#e2e8f0] dark:border-white/10 bg-white dark:bg-[#171a21] text-[#64748b] dark:text-slate-400 hover:text-[#0f172a] dark:hover:text-white"
-            }`}
-            title={inspectorOpen ? "Hide Inspector" : "Show Inspector"}
+            disabled={wires.length === 0}
+            onClick={() => autoNumberWires()}
+            aria-label="Auto-Number Wires (Ctrl+Shift+N)"
+            className="p-2 rounded-xl transition-colors cursor-pointer bg-white hover:bg-slate-100 text-slate-800 dark:bg-[#131620] dark:hover:bg-[#1c202e] dark:text-zinc-200 dark:hover:text-white disabled:opacity-35 disabled:pointer-events-none"
           >
-            {inspectorOpen ? (
-              <PanelRightClose className="h-3.5 w-3.5" />
+            <Hash className="h-4 w-4" />
+          </button>
+          {renderTooltip("Auto-Number Wires (Ctrl+Shift+N)")}
+        </div>
+
+        {/* Theme Toggle Icon Button (Borderless) */}
+        <div className="relative group/tip hidden sm:block">
+          <button
+            type="button"
+            onClick={toggleTheme}
+            aria-label={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
+            className="p-2 rounded-xl transition-colors cursor-pointer bg-white hover:bg-slate-100 text-slate-800 dark:bg-[#131620] dark:hover:bg-[#1c202e] dark:text-zinc-200 dark:hover:text-white"
+          >
+            {theme === "dark" ? (
+              <Sun className="h-4 w-4" />
             ) : (
-              <PanelRightOpen className="h-3.5 w-3.5" />
+              <Moon className="h-4 w-4" />
             )}
           </button>
-        )}
+          {renderTooltip(theme === "dark" ? "Light Mode" : "Dark Mode")}
+        </div>
 
-        {/* Auth / Account Pill (RelayFlow parity) */}
+        {/* Auth / Account */}
         {!user ? (
-          <button
-            type="button"
+          <Button
+            variant="primary"
+            size="sm"
             onClick={() => setAuthModalOpen(true)}
-            aria-label="Login"
-            className="flex h-8 items-center gap-1.5 rounded-full border border-[#e2e8f0] dark:border-white/15 bg-white text-[#0f172a] dark:bg-white dark:text-black px-2.5 sm:px-3.5 text-xs font-semibold shadow-xs transition-all hover:bg-[#f8fafc] dark:hover:bg-slate-100"
+            className="rounded-xl font-semibold"
           >
             <LogIn className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Login</span>
-          </button>
+            <span>Login</span>
+          </Button>
         ) : (
-          <div className="relative" ref={accountMenuRef}>
-            <button
-              type="button"
-              onClick={() => setAccountMenuOpen((o) => !o)}
-              className="flex h-8 items-center gap-1.5 sm:gap-2 rounded-full border border-[#e2e8f0] dark:border-white/15 bg-white dark:bg-[#171a21] pr-2 sm:pr-2.5 pl-1.5 text-xs font-medium text-[#0f172a] dark:text-slate-200 shadow-xs hover:bg-[#f8fafc] dark:hover:bg-white/10"
-            >
-              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#0f172a] dark:bg-white text-[10px] font-bold text-white dark:text-black">
-                {(user.name || user.email).charAt(0).toUpperCase()}
-              </span>
-              <span className="hidden sm:inline max-w-[110px] truncate">
-                {user.name || user.email.split("@")[0]}
-              </span>
-              <span
-                className={`h-1.5 w-1.5 rounded-full ${
-                  syncStatus === "saving"
-                    ? "bg-amber-400 animate-pulse"
-                    : syncStatus === "error"
-                      ? "bg-rose-500"
-                      : "bg-emerald-500"
-                }`}
-                title={`Cloud Auto-Save: ${syncStatus}`}
-              />
-              <ChevronDown className="h-3 w-3 text-[#64748b] dark:text-slate-400" />
-            </button>
-
-            {accountMenuOpen && (
-              <div className="absolute top-10 right-0 z-50 w-56 rounded-xl border border-[#e2e8f0] dark:border-white/10 bg-white/98 dark:bg-[#111318]/98 p-1.5 shadow-xl backdrop-blur-xl text-[13px]">
-                <div className="px-2.5 py-1.5 border-b border-[#e2e8f0] dark:border-white/10 mb-1">
-                  <div className="truncate text-xs font-semibold text-[#0f172a] dark:text-white">
-                    {user.name || "PanelFlow Engineer"}
-                  </div>
-                  <div className="truncate font-mono text-[10px] text-[#64748b] dark:text-slate-400">
-                    {user.email}
-                  </div>
-                </div>
+          <Dropdown
+            isOpen={accountMenuOpen}
+            onClose={() => setAccountMenuOpen(false)}
+            align="right"
+            widthClassName="w-56"
+            trigger={
+              <div className="relative group/tip">
                 <button
                   type="button"
-                  onClick={() => {
-                    setAccountMenuOpen(false);
-                    setProjectsDrawerOpen(true);
-                  }}
-                  className={dropdownItemClass}
+                  aria-label={user.name || user.email}
+                  onClick={() => setAccountMenuOpen((o) => !o)}
+                  className="flex items-center gap-1 p-1 rounded-xl transition-colors cursor-pointer bg-white hover:bg-slate-100 text-slate-800 dark:bg-[#131620] dark:hover:bg-[#1c202e] dark:text-zinc-200 dark:hover:text-white"
                 >
-                  <Cloud className="h-3.5 w-3.5 text-sky-500 dark:text-sky-400" />
-                  My Cloud Projects
-                </button>
-                <div className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs text-[#64748b] dark:text-slate-400">
-                  <span
-                    className={`h-2 w-2 rounded-full ${
-                      syncStatus === "saving"
-                        ? "bg-amber-400 animate-pulse"
-                        : syncStatus === "error"
-                          ? "bg-rose-500"
-                          : "bg-emerald-500"
-                    }`}
-                  />
-                  <span>
-                    Cloud Auto-Save:{" "}
-                    <strong className="text-emerald-600 dark:text-emerald-400">
-                      {syncStatus === "saving" ? "Syncing..." : "Active"}
-                    </strong>
+                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-900 text-white dark:bg-white dark:text-black text-xs font-bold">
+                    {(user.name || user.email).charAt(0).toUpperCase()}
                   </span>
-                </div>
-                <div className={dropdownDividerClass} />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAccountMenuOpen(false);
-                    logout();
-                  }}
-                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10"
-                >
-                  <LogOut className="h-3.5 w-3.5" />
-                  Sign Out
+                  <ChevronDown className="h-3 w-3 opacity-60" />
                 </button>
+                {!accountMenuOpen && renderTooltip(user.name || user.email, "right")}
               </div>
-            )}
-          </div>
+            }
+          >
+            <div className="px-2.5 py-1.5 border-b border-slate-200 dark:border-white/10 mb-1">
+              <div className="truncate text-xs font-semibold text-slate-900 dark:text-white">
+                {user.name || "PanelFlow Engineer"}
+              </div>
+              <div className="truncate font-sans text-[10px] text-slate-500 dark:text-slate-400">
+                {user.email}
+              </div>
+            </div>
+            <DropdownItem
+              icon={<Cloud className={`h-3.5 w-3.5 ${monoIconClass}`} />}
+              onClick={() => {
+                setAccountMenuOpen(false);
+                setProjectsDrawerOpen(true);
+              }}
+            >
+              My Cloud Projects
+            </DropdownItem>
+            <div className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs text-slate-500 dark:text-slate-400">
+              <Cloud className={`h-3.5 w-3.5 ${monoIconClass}`} />
+              <span>
+                Cloud Auto-Save:{" "}
+                <strong className="text-slate-800 dark:text-slate-200">
+                  {syncStatus === "saving" ? "Syncing..." : "Active"}
+                </strong>
+              </span>
+            </div>
+            <DropdownSeparator />
+            <DropdownItem
+              icon={<LogOut className={`h-3.5 w-3.5 ${monoIconClass}`} />}
+              onClick={() => {
+                setAccountMenuOpen(false);
+                logout();
+              }}
+            >
+              Sign Out
+            </DropdownItem>
+          </Dropdown>
         )}
       </div>
       <input

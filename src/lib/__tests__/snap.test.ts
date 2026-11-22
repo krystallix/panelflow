@@ -4,6 +4,7 @@ import {
   DIN_RAIL_DEPTH_MM,
   snapComponentToNearestRail,
   snapPointToGrid,
+  snapSideBySideOnRail,
   snapToGrid,
 } from "@/lib/snap";
 import type { DinRail } from "@/types/panel";
@@ -55,5 +56,14 @@ describe("Grid & DIN Rail Snap Math", () => {
     expect(res.xMm).toBe(10);
     expect(res.yMm).toBe(30);
     expect(res.zMm).toBe(30);
+  });
+
+  it("snaps modular DIN components side-by-side with 0mm gap on the same rail", () => {
+    const others = [
+      { id: "mcb-1", railId: "r1", xMm: 0, widthMm: 18, heightMm: 85 },
+    ];
+    const snapped = snapSideBySideOnRail(21, 18, "r1", others, "mcb-2");
+    expect(snapped.snappedToNeighborId).toBe("mcb-1");
+    expect(snapped.xMm).toBe(18);
   });
 });

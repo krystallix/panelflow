@@ -8,18 +8,23 @@ import {
   Clock,
   Cpu,
   FileUp,
+  FolderOpen,
   Image as ImageIcon,
   Layers,
   MapPin,
   Pencil,
   Plus,
   Search,
+  Shield,
+  SlidersHorizontal,
   Star,
   Trash2,
   X,
+  Zap,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
 import { CadPreviewThumbnail } from "@/components/ui/CadPreviewThumbnail";
+import { ComponentSvg2D } from "@/components/viewport/ComponentSvg2D";
 import { ImageToCadModal } from "@/components/modals/ImageToCadModal";
 import {
   COMPONENT_CATALOG,
@@ -35,18 +40,31 @@ import {
   updateCustomCadCloudId,
   type CustomLibraryCadItem,
 } from "@/lib/indexed-db";
-import { getBackplateDimensions } from "@/lib/template-export";
-import { formatDim, fromMm, inputStepForUnit, toMm } from "@/lib/units";
+import {
+  PANELFLOW_PART_DRAG_MIME,
+  buildCadAssetFromLibraryItem,
+  setDraggedCadLibraryItem,
+} from "@/lib/part-drag";
+import { formatDim } from "@/lib/units";
 import { usePanelStore } from "@/store/usePanelStore";
 import type {
   CadFormat,
   CadImportUnit,
   ComponentCategory,
+  ComponentTemplate,
   ComponentTemplateId,
   CustomCadAsset,
 } from "@/types/panel";
 
-type TabId = "components" | "rails" | "enclosure" | "cad";
+type TabId = "components" | "cad";
+
+const CATEGORY_ICONS: Record<ComponentCategory, React.ReactNode> = {
+  "Protection & Switchgear": <Shield className="h-3.5 w-3.5 text-zinc-400 shrink-0" />,
+  "Control & Automation": <Cpu className="h-3.5 w-3.5 text-zinc-400 shrink-0" />,
+  "Power & Distribution": <Zap className="h-3.5 w-3.5 text-zinc-400 shrink-0" />,
+  "Terminals & DIN Accessories": <Layers className="h-3.5 w-3.5 text-zinc-400 shrink-0" />,
+  "Door & Panel Controls": <SlidersHorizontal className="h-3.5 w-3.5 text-zinc-400 shrink-0" />,
+};
 
 function PartVectorIcon({
   templateId,
@@ -55,187 +73,58 @@ function PartVectorIcon({
   templateId: ComponentTemplateId;
   accentColor: string;
 }) {
-  switch (templateId) {
-    case "mcb-1p":
-    case "fuse-1p":
-      return (
-        <svg viewBox="0 0 36 44" className="h-9 w-9">
-          <rect x="10" y="4" width="16" height="36" rx="2" fill="#1e222d" stroke="#475569" strokeWidth="1.3" />
-          <circle cx="18" cy="8" r="1.8" fill="#94a3b8" />
-          <circle cx="18" cy="36" r="1.8" fill="#94a3b8" />
-          <rect x="13" y="17" width="10" height="9" rx="1.2" fill={accentColor} />
-          <line x1="18" y1="12" x2="18" y2="17" stroke="#64748b" strokeWidth="1" />
-        </svg>
-      );
-    case "mcb-2p":
-      return (
-        <svg viewBox="0 0 42 44" className="h-9 w-9">
-          <rect x="7" y="4" width="28" height="36" rx="2" fill="#1e222d" stroke="#475569" strokeWidth="1.3" />
-          <line x1="21" y1="4" x2="21" y2="40" stroke="#334155" strokeWidth="0.9" />
-          <circle cx="14" cy="8" r="1.6" fill="#94a3b8" />
-          <circle cx="28" cy="8" r="1.6" fill="#94a3b8" />
-          <circle cx="14" cy="36" r="1.6" fill="#94a3b8" />
-          <circle cx="28" cy="36" r="1.6" fill="#94a3b8" />
-          <rect x="10" y="18" width="22" height="7" rx="1.2" fill={accentColor} />
-        </svg>
-      );
-    case "mcb-3p":
-    case "mcb-4p":
-    case "spd-3pn":
-      return (
-        <svg viewBox="0 0 48 44" className="h-9 w-9">
-          <rect x="4" y="4" width="40" height="36" rx="2" fill="#1e222d" stroke="#475569" strokeWidth="1.3" />
-          <line x1="17" y1="4" x2="17" y2="40" stroke="#334155" strokeWidth="0.9" />
-          <line x1="31" y1="4" x2="31" y2="40" stroke="#334155" strokeWidth="0.9" />
-          <circle cx="10.5" cy="8" r="1.6" fill="#94a3b8" />
-          <circle cx="24" cy="8" r="1.6" fill="#94a3b8" />
-          <circle cx="37.5" cy="8" r="1.6" fill="#94a3b8" />
-          <circle cx="10.5" cy="36" r="1.6" fill="#94a3b8" />
-          <circle cx="24" cy="36" r="1.6" fill="#94a3b8" />
-          <circle cx="37.5" cy="36" r="1.6" fill="#94a3b8" />
-          <rect x="8" y="18" width="32" height="7" rx="1.2" fill={accentColor} />
-        </svg>
-      );
-    case "mccb-100a":
-      return (
-        <svg viewBox="0 0 48 48" className="h-9 w-9">
-          <rect x="8" y="3" width="32" height="42" rx="3" fill="#1e293b" stroke="#475569" strokeWidth="1.4" />
-          <rect x="18" y="15" width="12" height="16" rx="2" fill="#0f172a" stroke={accentColor} strokeWidth="1.2" />
-          <rect x="20" y="20" width="8" height="6" rx="1" fill={accentColor} />
-          <circle cx="14" cy="7" r="1.6" fill="#94a3b8" />
-          <circle cx="24" cy="7" r="1.6" fill="#94a3b8" />
-          <circle cx="34" cy="7" r="1.6" fill="#94a3b8" />
-          <circle cx="14" cy="41" r="1.6" fill="#94a3b8" />
-          <circle cx="24" cy="41" r="1.6" fill="#94a3b8" />
-          <circle cx="34" cy="41" r="1.6" fill="#94a3b8" />
-        </svg>
-      );
-    case "contactor":
-    case "tor":
-      return (
-        <svg viewBox="0 0 46 44" className="h-9 w-9">
-          <rect x="5" y="4" width="36" height="36" rx="2.5" fill="#1e222d" stroke="#475569" strokeWidth="1.3" />
-          <rect x="9" y="13" width="28" height="18" rx="1.5" fill="#0f172a" stroke={accentColor} strokeWidth="1.1" />
-          <rect x="17" y="18" width="12" height="8" rx="1" fill={accentColor} fillOpacity="0.8" />
-          <circle cx="11" cy="8" r="1.5" fill="#94a3b8" />
-          <circle cx="19" cy="8" r="1.5" fill="#94a3b8" />
-          <circle cx="27" cy="8" r="1.5" fill="#94a3b8" />
-          <circle cx="35" cy="8" r="1.5" fill="#94a3b8" />
-          <circle cx="11" cy="36" r="1.5" fill="#94a3b8" />
-          <circle cx="19" cy="36" r="1.5" fill="#94a3b8" />
-          <circle cx="27" cy="36" r="1.5" fill="#94a3b8" />
-          <circle cx="35" cy="36" r="1.5" fill="#94a3b8" />
-        </svg>
-      );
-    case "relay":
-    case "timer-relay":
-      return (
-        <svg viewBox="0 0 36 44" className="h-9 w-9">
-          <rect x="8" y="5" width="20" height="34" rx="2" fill="#1e222d" stroke="#475569" strokeWidth="1.3" />
-          <rect x="11" y="12" width="14" height="20" rx="1.5" fill="#0f172a" stroke={accentColor} strokeWidth="1" />
-          <circle cx="18" cy="18" r="2.6" fill={accentColor} />
-          <line x1="14" y1="25" x2="22" y2="25" stroke="#64748b" strokeWidth="1.2" />
-        </svg>
-      );
-    case "plc-compact":
-      return (
-        <svg viewBox="0 0 48 44" className="h-9 w-9">
-          <rect x="4" y="6" width="40" height="32" rx="2.5" fill="#1e293b" stroke="#475569" strokeWidth="1.3" />
-          <rect x="7" y="9" width="34" height="4" rx="1" fill="#0f172a" />
-          <rect x="7" y="31" width="34" height="4" rx="1" fill="#0f172a" />
-          <circle cx="11" cy="20" r="1.8" fill="#22c55e" />
-          <circle cx="16" cy="20" r="1.8" fill={accentColor} />
-          <text x="22" y="22.5" fontSize="6" fontFamily="monospace" fill="#cbd5e1" fontWeight="bold">PLC</text>
-        </svg>
-      );
-    case "vfd-15kw":
-      return (
-        <svg viewBox="0 0 42 48" className="h-9 w-9">
-          <rect x="8" y="3" width="26" height="42" rx="2.5" fill="#1e293b" stroke="#475569" strokeWidth="1.3" />
-          <rect x="12" y="8" width="18" height="10" rx="1.2" fill="#0f172a" stroke={accentColor} strokeWidth="1" />
-          <circle cx="21" cy="27" r="4" fill="#334155" stroke={accentColor} strokeWidth="1" />
-          <text x="14" y="15" fontSize="5" fontFamily="monospace" fill="#38bdf8" fontWeight="bold">50.0</text>
-        </svg>
-      );
-    case "terminal-block":
-    case "terminal-n":
-    case "terminal-pe":
-    case "end-clamp":
-      return (
-        <svg viewBox="0 0 36 44" className="h-9 w-9">
-          <rect x="12" y="5" width="12" height="34" rx="1.5" fill="#1e222d" stroke={accentColor} strokeWidth="1.3" />
-          <circle cx="18" cy="11" r="2" fill="#94a3b8" />
-          <circle cx="18" cy="33" r="2" fill="#94a3b8" />
-          <line x1="18" y1="13" x2="18" y2="31" stroke={accentColor} strokeWidth="1.5" />
-        </svg>
-      );
-    case "psu-24v":
-    case "psu-24v-10a":
-    case "dist-block-4p":
-      return (
-        <svg viewBox="0 0 48 44" className="h-9 w-9">
-          <rect x="5" y="4" width="38" height="36" rx="2.5" fill="#1e222d" stroke="#475569" strokeWidth="1.3" />
-          <line x1="10" y1="12" x2="38" y2="12" stroke="#334155" strokeWidth="1" />
-          <line x1="10" y1="16" x2="38" y2="16" stroke="#334155" strokeWidth="1" />
-          <line x1="10" y1="20" x2="38" y2="20" stroke="#334155" strokeWidth="1" />
-          <circle cx="34" cy="29" r="2.5" fill={accentColor} />
-          <text x="10" y="31" fontSize="6.5" fontFamily="monospace" fill="#cbd5e1" fontWeight="bold">
-            {templateId === "dist-block-4p" ? "DIST" : "24V"}
-          </text>
-        </svg>
-      );
-    case "pilot-lamp-red":
-    case "pilot-lamp-green":
-    case "pilot-lamp-yellow":
-    case "push-button":
-    case "e-stop":
-    case "selector-3pos":
-    case "cam-lock":
-      return (
-        <svg viewBox="0 0 40 40" className="h-9 w-9">
-          <circle cx="20" cy="20" r="14" fill={templateId === "e-stop" ? "#facc15" : "#1e293b"} stroke="#475569" strokeWidth="1.5" />
-          <circle cx="20" cy="20" r="9" fill={accentColor} stroke="#0f172a" strokeWidth="1.2" />
-          {templateId === "selector-3pos" && (
-            <line x1="14" y1="14" x2="26" y2="26" stroke="#ffffff" strokeWidth="2.2" strokeLinecap="round" />
-          )}
-          {templateId === "cam-lock" && (
-            <rect x="18" y="13" width="4" height="14" rx="1" fill="#ffffff" />
-          )}
-        </svg>
-      );
-    case "panel-meter-96":
-      return (
-        <svg viewBox="0 0 44 44" className="h-9 w-9">
-          <rect x="5" y="5" width="34" height="34" rx="2.5" fill="#0f172a" stroke="#475569" strokeWidth="1.4" />
-          <rect x="9" y="10" width="26" height="16" rx="1" fill="#0284c7" fillOpacity="0.25" stroke={accentColor} strokeWidth="1" />
-          <text x="12" y="21" fontSize="6.5" fontFamily="monospace" fill="#38bdf8" fontWeight="bold">400V</text>
-        </svg>
-      );
-    case "cooling-fan-120":
-      return (
-        <svg viewBox="0 0 44 44" className="h-9 w-9">
-          <rect x="5" y="5" width="34" height="34" rx="2.5" fill="#1e293b" stroke="#475569" strokeWidth="1.4" />
-          <circle cx="22" cy="22" r="12" fill="#0f172a" stroke="#64748b" strokeWidth="1" />
-          <circle cx="22" cy="22" r="3.5" fill={accentColor} />
-          <line x1="22" y1="11" x2="22" y2="33" stroke="#94a3b8" strokeWidth="1.5" />
-          <line x1="11" y1="22" x2="33" y2="22" stroke="#94a3b8" strokeWidth="1.5" />
-        </svg>
-      );
-    default:
-      return (
-        <svg viewBox="0 0 36 44" className="h-9 w-9">
-          <rect x="8" y="6" width="20" height="32" rx="2" fill="#1e222d" stroke={accentColor} strokeWidth="1.3" />
-        </svg>
-      );
-  }
+  const tpl = COMPONENT_CATALOG[templateId];
+  if (!tpl) return null;
+
+  const pad = 4;
+  const padTop = tpl.id === "tor" ? 12 : pad;
+  const vh = tpl.heightMm + padTop + pad;
+  const vw = Math.max(tpl.widthMm + pad * 2, vh * 0.55);
+  const vx = (tpl.widthMm - vw) / 2;
+  const vy = -padTop;
+
+  const previewComp = {
+    id: `preview-${tpl.id}`,
+    templateId: tpl.id,
+    name: tpl.shortName,
+    mountingType: tpl.mountingType ?? "din_rail",
+    xMm: tpl.widthMm / 2,
+    yMm: -tpl.heightMm / 2,
+    zMm: tpl.depthMm / 2,
+    rotationDeg: 0 as const,
+    railId: null,
+    widthMm: tpl.widthMm,
+    heightMm: tpl.heightMm,
+    depthMm: tpl.depthMm,
+    color: tpl.color,
+    accentColor: accentColor || tpl.accentColor,
+    pins: tpl.pins.map((p, idx) => ({
+      ...p,
+      id: `preview-pin-${idx}`,
+    })),
+  };
+
+  return (
+    <svg
+      viewBox={`${vx} ${vy} ${vw} ${vh}`}
+      className="h-9 w-9 overflow-visible"
+      preserveAspectRatio="xMidYMid meet"
+    >
+      <ComponentSvg2D
+        comp={previewComp}
+        x={0}
+        y={0}
+        bodyFill="#f8fafc"
+        isSelected={false}
+      />
+    </svg>
+  );
 }
 
 export function LeftSidebar() {
   const [activeTab, setActiveTab] = useState<TabId>("components");
   const [searchQuery, setSearchQuery] = useState("");
   const [cadImportUnit, setCadImportUnit] = useState<CadImportUnit>("mm");
-  const [railsOpen, setRailsOpen] = useState(true);
-  const [ductsOpen, setDuctsOpen] = useState(true);
   const [openCategories, setOpenCategories] = useState<Record<string, boolean>>({
     Favorites: true,
     "Recent Symbols": true,
@@ -253,6 +142,10 @@ export function LeftSidebar() {
   const [editingCadId, setEditingCadId] = useState<string | null>(null);
   const [editingCadName, setEditingCadName] = useState("");
   const [showImageToCadModal, setShowImageToCadModal] = useState(false);
+  const [hoveredPart, setHoveredPart] = useState<{
+    tpl: ComponentTemplate;
+    rect: DOMRect;
+  } | null>(null);
 
   const hydratePartPreferences = usePanelStore((s) => s.hydratePartPreferences);
 
@@ -276,22 +169,27 @@ export function LeftSidebar() {
   }, [hydratePartPreferences]);
 
   const displayUnit = usePanelStore((s) => s.displayUnit);
-  const enclosure = usePanelStore((s) => s.enclosure);
-  const plateConfig = usePanelStore((s) => s.plateConfig);
-  const rails = usePanelStore((s) => s.rails);
-  const ducts = usePanelStore((s) => s.ducts);
+  const components = usePanelStore((s) => s.components);
   const cadAssets = usePanelStore((s) => s.cadAssets);
+  const [torNotice, setTorNotice] = useState<string | null>(null);
+
+  const hasAvailableContactor = useMemo(
+    () =>
+      components.some(
+        (c) =>
+          c.templateId === "contactor" &&
+          !components.some(
+            (other) =>
+              other.templateId === "tor" && other.mountedToComponentId === c.id
+          )
+      ),
+    [components]
+  );
   const selected = usePanelStore((s) => s.selected);
   const isPinMarkingMode = usePanelStore((s) => s.isPinMarkingMode);
   const activeMarkingAssetId = usePanelStore((s) => s.activeMarkingAssetId);
 
-  const updateEnclosure = usePanelStore((s) => s.updateEnclosure);
-  const updatePlateConfig = usePanelStore((s) => s.updatePlateConfig);
   const setSelected = usePanelStore((s) => s.setSelected);
-  const addRail = usePanelStore((s) => s.addRail);
-  const removeRail = usePanelStore((s) => s.removeRail);
-  const addDuct = usePanelStore((s) => s.addDuct);
-  const removeDuct = usePanelStore((s) => s.removeDuct);
   const addComponent = usePanelStore((s) => s.addComponent);
   const leftSidebarOpen = usePanelStore((s) => s.leftSidebarOpen);
   const setLeftSidebarOpen = usePanelStore((s) => s.setLeftSidebarOpen);
@@ -302,12 +200,6 @@ export function LeftSidebar() {
   const updateCadAsset = usePanelStore((s) => s.updateCadAsset);
   const removeCadAsset = usePanelStore((s) => s.removeCadAsset);
   const setPinMarkingMode = usePanelStore((s) => s.setPinMarkingMode);
-
-  const { widthMm: plateW, heightMm: plateH } = getBackplateDimensions(
-    enclosure,
-    plateConfig
-  );
-  const step = inputStepForUnit(displayUnit);
 
   const q = searchQuery.trim().toLowerCase();
   const filteredComponents = COMPONENT_LIST.filter(
@@ -337,12 +229,6 @@ export function LeftSidebar() {
           c.shortName.toLowerCase().includes(q) ||
           c.category.toLowerCase().includes(q))
     );
-  const filteredRails = rails.filter(
-    (r) => !q || r.name.toLowerCase().includes(q)
-  );
-  const filteredDucts = ducts.filter(
-    (d) => !q || d.name.toLowerCase().includes(q)
-  );
   const filteredCad = cadAssets.filter(
     (a) =>
       !q ||
@@ -469,35 +355,40 @@ export function LeftSidebar() {
   };
 
   const handleInstantiateFromLibrary = (item: CustomLibraryCadItem) => {
-    const uid = `cad-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    const newAsset: CustomCadAsset = {
-      id: uid,
-      name: item.name,
-      fileName: item.fileName,
-      format: item.format,
-      sourceUnit: item.sourceUnit,
-      xMm: 0,
-      yMm: 0,
-      zMm: Math.max(10, item.boundingBoxMm.d / 2),
-      boundingBoxMm: { ...item.boundingBoxMm },
-      cropMm: item.cropMm ? { ...item.cropMm } : undefined,
-      pins: item.pins.map((p, idx) => ({
-        ...p,
-        id: `${uid}-pin-${idx + 1}`,
-      })),
-      rawText: item.rawText,
-      dataUrl: item.dataUrl,
-      objectUrl: item.dataUrl,
-      imageOverlayUrl: item.imageOverlayUrl,
-      showImageOverlay: item.showImageOverlay,
-      imageOpacity: item.imageOpacity,
-      lockAspectRatio: item.lockAspectRatio,
-      materialType: item.materialType,
-      drawShape: item.drawShape,
-      entityCount: item.entityCount,
-      parseWarning: item.parseWarning,
-    };
-    addCadAsset(newAsset);
+    addCadAsset(buildCadAssetFromLibraryItem(item));
+  };
+
+  const handlePartDragStart = (
+    e: React.DragEvent,
+    templateId: ComponentTemplateId
+  ) => {
+    if (templateId === "tor" && !hasAvailableContactor) {
+      e.preventDefault();
+      setTorNotice("TOR harus dipasang pada Contactor. Tambahkan Contactor dulu.");
+      setTimeout(() => setTorNotice(null), 2600);
+      return;
+    }
+    setHoveredPart(null);
+    e.dataTransfer.setData(
+      PANELFLOW_PART_DRAG_MIME,
+      JSON.stringify({ kind: "component", templateId })
+    );
+    e.dataTransfer.setData("text/plain", templateId);
+    e.dataTransfer.effectAllowed = "copy";
+  };
+
+  const handleCadLibraryDragStart = (
+    e: React.DragEvent,
+    item: CustomLibraryCadItem
+  ) => {
+    setHoveredPart(null);
+    setDraggedCadLibraryItem(item);
+    e.dataTransfer.setData(
+      PANELFLOW_PART_DRAG_MIME,
+      JSON.stringify({ kind: "cad_library", libraryId: item.id })
+    );
+    e.dataTransfer.setData("text/plain", item.name);
+    e.dataTransfer.effectAllowed = "copy";
   };
 
   const handleCadUpload = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -546,12 +437,15 @@ export function LeftSidebar() {
 
   const tabs: { id: TabId; label: string; icon: typeof Box }[] = [
     { id: "components", label: "Parts", icon: Cpu },
-    { id: "rails", label: "Rails", icon: Layers },
-    { id: "enclosure", label: "Plate", icon: Box },
     { id: "cad", label: "CAD", icon: FileUp },
   ];
 
   const handleAddComponent = (templateId: ComponentTemplateId) => {
+    if (templateId === "tor" && !hasAvailableContactor) {
+      setTorNotice("TOR harus dipasang pada Contactor. Tambahkan Contactor dulu.");
+      setTimeout(() => setTorNotice(null), 2600);
+      return;
+    }
     addComponent(templateId);
     if (typeof window !== "undefined" && window.innerWidth < 768) {
       setLeftSidebarOpen(false);
@@ -569,11 +463,11 @@ export function LeftSidebar() {
         onClick={() => setLeftSidebarOpen(false)}
         aria-hidden="true"
       />
-      <aside className="fixed inset-y-0 left-0 z-50 flex w-[86vw] max-w-[320px] flex-col border-r border-[#e2e8f0] dark:border-white/10 bg-[#f8fafc] dark:bg-[#0c0e14]/95 text-[#0f172a] dark:text-slate-200 shadow-2xl backdrop-blur-xl md:relative md:inset-y-auto md:left-auto md:z-auto md:w-[300px] md:max-w-none md:shrink-0 md:translate-x-0 md:shadow-none md:bg-[#f8fafc] md:dark:bg-[#0c0e14]/90">
+      <aside className="fixed inset-y-0 left-0 z-50 flex w-[86vw] max-w-[320px] flex-col border-r border-[#e2e8f0] dark:border-white/10 bg-white dark:bg-[#0c0e14]/95 text-[#0f172a] dark:text-slate-200 shadow-2xl backdrop-blur-xl md:relative md:inset-y-auto md:left-auto md:z-auto md:w-[300px] md:max-w-none md:shrink-0 md:translate-x-0 md:shadow-none md:bg-white md:dark:bg-[#0c0e14]/90">
         {/* Mobile Drawer Header */}
         <div className="flex shrink-0 items-center justify-between border-b border-[#e2e8f0] dark:border-white/10 px-3 py-2 md:hidden">
           <div className="flex items-center gap-2">
-            <Cpu className="h-4 w-4 text-sky-600 dark:text-sky-400" />
+            <Cpu className="h-4 w-4 text-slate-600 dark:text-zinc-400" />
             <span className="text-xs font-semibold tracking-tight text-[#0f172a] dark:text-white">
               Parts &amp; Library
             </span>
@@ -596,7 +490,7 @@ export function LeftSidebar() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search parts, rails, symbols..."
-            className="w-full bg-transparent text-[13px] text-[#0f172a] dark:text-slate-100 placeholder:text-[#94a3b8] dark:placeholder:text-slate-500 focus:outline-none"
+            className="w-full bg-transparent text-xs text-[#0f172a] dark:text-slate-100 placeholder:text-[#94a3b8] dark:placeholder:text-slate-500 focus:outline-none"
           />
           {searchQuery && (
             <button
@@ -610,9 +504,9 @@ export function LeftSidebar() {
         </div>
       </div>
 
-      {/* Category Pill Switcher */}
-      <div className="px-2.5 pb-2">
-        <div className="grid grid-cols-4 gap-1 rounded-xl border border-[#e2e8f0] dark:border-white/10 bg-[#f1f5f9] dark:bg-[#131620]/70 p-1">
+      {/* Category Pill Switcher (Compact 2-tab: Parts & CAD) */}
+      <div className="px-2.5 pb-1.5">
+        <div className="grid grid-cols-2 gap-0.5 rounded-lg border border-[#e2e8f0] dark:border-white/10 bg-[#f1f5f9] dark:bg-[#131620]/70 p-0.5">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const active = activeTab === tab.id;
@@ -621,14 +515,14 @@ export function LeftSidebar() {
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex flex-col items-center gap-0.5 rounded-lg py-1.5 text-xs font-semibold transition-all ${
+                className={`flex items-center justify-center gap-1 rounded-md py-1 px-1 text-[11px] font-medium transition-all cursor-pointer truncate ${
                   active
-                    ? "bg-[#0f172a] text-white dark:bg-white dark:text-black shadow-xs"
+                    ? "bg-[#0f172a] text-white dark:bg-white dark:text-black shadow-xs font-semibold"
                     : "text-[#64748b] dark:text-slate-400 hover:bg-[#e2e8f0] dark:hover:bg-white/5 hover:text-[#0f172a] dark:hover:text-slate-200"
                 }`}
               >
-                <Icon className="h-4 w-4" />
-                {tab.label}
+                <Icon className="h-3 w-3 shrink-0" />
+                <span className="truncate">{tab.label}</span>
               </button>
             );
           })}
@@ -639,34 +533,46 @@ export function LeftSidebar() {
       <div className="flex-1 overflow-y-auto px-2.5 pb-3 space-y-3 text-xs">
         {activeTab === "components" && (
           <div className="space-y-2.5">
+            {torNotice && (
+              <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-2.5 py-1.5 text-[11px] font-medium text-amber-700 dark:text-amber-300">
+                {torNotice}
+              </div>
+            )}
             {/* ★ FAVORITES Section */}
             {favoriteItems.length > 0 && (
-              <div className="rounded-xl border border-amber-300 dark:border-amber-500/30 bg-amber-50/40 dark:bg-amber-950/20 p-2.5 space-y-2 shadow-xs">
+              <div className="rounded-xl border border-slate-200 dark:border-white/5 bg-transparent overflow-hidden transition-colors">
                 <button
                   type="button"
                   onClick={() => toggleCategory("Favorites")}
-                  className="flex w-full items-center justify-between font-mono text-[11px] font-semibold uppercase tracking-wider text-amber-800 dark:text-amber-300"
+                  className="w-full px-2.5 py-1.5 flex items-center gap-1.5 text-left text-[11px] font-medium text-slate-700 hover:text-slate-900 hover:bg-slate-100 dark:text-zinc-300 dark:hover:text-white dark:hover:bg-white/5 transition-colors cursor-pointer"
                 >
-                  <span className="flex items-center gap-1.5">
-                    <ChevronDown
-                      className={`h-3.5 w-3.5 transition-transform ${
-                        openCategories["Favorites"] ? "" : "-rotate-90"
-                      }`}
-                    />
-                    <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-500" />
-                    FAVORITES
-                  </span>
-                  <span className="rounded-full bg-amber-200/60 dark:bg-amber-900/50 px-2 py-0.5 text-[10px] text-amber-800 dark:text-amber-200 font-mono">
-                    {favoriteItems.length}
+                  <ChevronDown
+                    className={`h-3 w-3 text-zinc-400 shrink-0 transition-transform ${
+                      openCategories["Favorites"] ? "" : "-rotate-90"
+                    }`}
+                  />
+                  <Star className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400 shrink-0" />
+                  <span className="truncate">Favorites</span>
+                  <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-sans font-normal shrink-0">
+                    ({favoriteItems.length})
                   </span>
                 </button>
 
                 {openCategories["Favorites"] && (
-                  <div className="grid grid-cols-2 gap-2 pt-1">
+                  <div className="p-1.5 grid grid-cols-2 gap-1.5">
                     {favoriteItems.map((tpl) => (
                       <div
                         key={`fav-${tpl.id}`}
-                        className="group relative flex flex-col items-center justify-between rounded-xl border border-amber-200 dark:border-amber-500/20 bg-white dark:bg-[#171a21] p-2 text-center transition-all hover:border-amber-400 dark:hover:border-amber-400 hover:bg-amber-50/30 dark:hover:bg-[#1d212b]"
+                        draggable
+                        onDragStart={(e) => handlePartDragStart(e, tpl.id)}
+                        onMouseEnter={(e) =>
+                          setHoveredPart({
+                            tpl,
+                            rect: e.currentTarget.getBoundingClientRect(),
+                          })
+                        }
+                        onMouseLeave={() => setHoveredPart(null)}
+                        className="group relative p-2 rounded-lg cursor-grab active:cursor-grabbing flex flex-col items-center justify-center text-center transition-all bg-transparent border border-transparent hover:bg-slate-100 hover:border-slate-200 dark:hover:bg-white/5 dark:hover:border-white/10"
                       >
                         <button
                           type="button"
@@ -675,31 +581,24 @@ export function LeftSidebar() {
                             toggleFavoritePart(tpl.id);
                           }}
                           title="Remove from Favorites"
-                          className="absolute top-1 right-1 z-10 rounded-full p-1 text-amber-500 hover:bg-amber-100 dark:hover:bg-amber-950/60 transition-colors"
+                          className="absolute top-1 right-1 z-10 rounded-full p-1 text-amber-500 hover:bg-amber-100 dark:hover:bg-amber-950/60 transition-colors cursor-pointer"
                         >
-                          <Star className="h-3 w-3 fill-amber-400 text-amber-500" />
+                          <Star className="h-3 w-3 text-slate-600 dark:text-zinc-400" />
                         </button>
                         <button
                           type="button"
                           onClick={() => handleAddComponent(tpl.id)}
-                          title={`Add ${tpl.name} (${tpl.widthMm}×${tpl.heightMm}mm)`}
-                          className="w-full flex flex-col items-center"
+                          className="w-full flex flex-col items-center cursor-pointer"
                         >
-                          <div className="flex h-10 w-full items-center justify-center">
+                          <div className="w-10 h-10 flex items-center justify-center p-1 mb-1.5 bg-transparent">
                             <PartVectorIcon
                               templateId={tpl.id}
                               accentColor={tpl.accentColor}
                             />
                           </div>
-                          <div className="mt-1.5 w-full">
-                            <div className="truncate text-[12px] font-medium text-[#0f172a] dark:text-slate-100 group-hover:text-amber-700 dark:group-hover:text-amber-300">
-                              {tpl.shortName}
-                            </div>
-                            <div className="mt-0.5 font-mono text-[10px] tabular-nums text-[#64748b] dark:text-slate-500">
-                              {formatDim(tpl.widthMm, displayUnit, 0)} ×{" "}
-                              {formatDim(tpl.heightMm, displayUnit, 0)}
-                            </div>
-                          </div>
+                          <span className="text-[11px] font-medium truncate w-full text-slate-700 group-hover:text-slate-900 dark:text-zinc-300 dark:group-hover:text-white transition-colors">
+                            {tpl.shortName}
+                          </span>
                         </button>
                       </div>
                     ))}
@@ -710,34 +609,41 @@ export function LeftSidebar() {
 
             {/* 🕒 RECENT SYMBOLS Section */}
             {recentItems.length > 0 && (
-              <div className="rounded-xl border border-indigo-200 dark:border-indigo-500/30 bg-indigo-50/30 dark:bg-indigo-950/20 p-2.5 space-y-2 shadow-xs">
+              <div className="rounded-xl border border-slate-200 dark:border-white/5 bg-transparent overflow-hidden transition-colors">
                 <button
                   type="button"
                   onClick={() => toggleCategory("Recent Symbols")}
-                  className="flex w-full items-center justify-between font-mono text-[11px] font-semibold uppercase tracking-wider text-indigo-800 dark:text-indigo-300"
+                  className="w-full px-2.5 py-1.5 flex items-center gap-1.5 text-left text-[11px] font-medium text-slate-700 hover:text-slate-900 hover:bg-slate-100 dark:text-zinc-300 dark:hover:text-white dark:hover:bg-white/5 transition-colors cursor-pointer"
                 >
-                  <span className="flex items-center gap-1.5">
-                    <ChevronDown
-                      className={`h-3.5 w-3.5 transition-transform ${
-                        openCategories["Recent Symbols"] ? "" : "-rotate-90"
-                      }`}
-                    />
-                    <Clock className="h-3.5 w-3.5 text-indigo-500" />
-                    RECENT SYMBOLS
-                  </span>
-                  <span className="rounded-full bg-indigo-200/60 dark:bg-indigo-900/50 px-2 py-0.5 text-[10px] text-indigo-800 dark:text-indigo-200 font-mono">
-                    {recentItems.length}
+                  <ChevronDown
+                    className={`h-3 w-3 text-zinc-400 shrink-0 transition-transform ${
+                      openCategories["Recent Symbols"] ? "" : "-rotate-90"
+                    }`}
+                  />
+                  <Clock className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
+                  <span className="truncate">Recent Parts</span>
+                  <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-sans font-normal shrink-0">
+                    ({recentItems.length})
                   </span>
                 </button>
 
                 {openCategories["Recent Symbols"] && (
-                  <div className="grid grid-cols-2 gap-2 pt-1">
+                  <div className="p-1.5 grid grid-cols-2 gap-1.5">
                     {recentItems.map((tpl) => {
                       const isFav = favoritePartIds.includes(tpl.id);
                       return (
                         <div
                           key={`rec-${tpl.id}`}
-                          className="group relative flex flex-col items-center justify-between rounded-xl border border-indigo-200/60 dark:border-indigo-500/20 bg-white dark:bg-[#171a21] p-2 text-center transition-all hover:border-indigo-400 dark:hover:border-indigo-400 hover:bg-indigo-50/20 dark:hover:bg-[#1d212b]"
+                          draggable
+                          onDragStart={(e) => handlePartDragStart(e, tpl.id)}
+                          onMouseEnter={(e) =>
+                            setHoveredPart({
+                              tpl,
+                              rect: e.currentTarget.getBoundingClientRect(),
+                            })
+                          }
+                          onMouseLeave={() => setHoveredPart(null)}
+                          className="group relative p-2 rounded-lg cursor-grab active:cursor-grabbing flex flex-col items-center justify-center text-center transition-all bg-transparent border border-transparent hover:bg-slate-100 hover:border-slate-200 dark:hover:bg-white/5 dark:hover:border-white/10"
                         >
                           <button
                             type="button"
@@ -746,7 +652,7 @@ export function LeftSidebar() {
                               toggleFavoritePart(tpl.id);
                             }}
                             title={isFav ? "Starred favorite" : "Add to Favorites"}
-                            className={`absolute top-1 right-1 z-10 rounded-full p-1 transition-colors ${
+                            className={`absolute top-1 right-1 z-10 rounded-full p-1 transition-colors cursor-pointer ${
                               isFav
                                 ? "text-amber-500"
                                 : "text-[#94a3b8] opacity-0 group-hover:opacity-100 hover:text-amber-500"
@@ -761,24 +667,17 @@ export function LeftSidebar() {
                           <button
                             type="button"
                             onClick={() => handleAddComponent(tpl.id)}
-                            title={`Add ${tpl.name} (${tpl.widthMm}×${tpl.heightMm}mm)`}
-                            className="w-full flex flex-col items-center"
+                            className="w-full flex flex-col items-center cursor-pointer"
                           >
-                            <div className="flex h-10 w-full items-center justify-center">
+                            <div className="w-10 h-10 flex items-center justify-center p-1 mb-1.5 bg-transparent">
                               <PartVectorIcon
                                 templateId={tpl.id}
                                 accentColor={tpl.accentColor}
                               />
                             </div>
-                            <div className="mt-1.5 w-full">
-                              <div className="truncate text-[12px] font-medium text-[#0f172a] dark:text-slate-100 group-hover:text-indigo-700 dark:group-hover:text-indigo-300">
-                                {tpl.shortName}
-                              </div>
-                              <div className="mt-0.5 font-mono text-[10px] tabular-nums text-[#64748b] dark:text-slate-500">
-                                {formatDim(tpl.widthMm, displayUnit, 0)} ×{" "}
-                                {formatDim(tpl.heightMm, displayUnit, 0)}
-                              </div>
-                            </div>
+                            <span className="text-[11px] font-medium truncate w-full text-slate-700 group-hover:text-slate-900 dark:text-zinc-300 dark:group-hover:text-white transition-colors">
+                              {tpl.shortName}
+                            </span>
                           </button>
                         </div>
                       );
@@ -794,7 +693,7 @@ export function LeftSidebar() {
                 <button
                   type="button"
                   onClick={() => toggleCategory("My CAD Library")}
-                  className="flex w-full items-center justify-between font-mono text-[11px] font-semibold uppercase tracking-wider text-sky-700 dark:text-sky-300"
+                  className="flex w-full items-center justify-between font-sans text-[11px] font-semibold uppercase tracking-wider text-sky-700 dark:text-sky-300"
                 >
                   <span className="flex items-center gap-1.5">
                     <ChevronDown
@@ -802,6 +701,7 @@ export function LeftSidebar() {
                         openCategories["My CAD Library"] ? "" : "-rotate-90"
                       }`}
                     />
+                    <FolderOpen className="h-3.5 w-3.5 text-zinc-400 shrink-0" />
                     My CAD Library
                   </span>
                   <span className="rounded-full bg-sky-100 dark:bg-sky-900/50 px-2 py-0.5 text-[10px]">
@@ -814,11 +714,14 @@ export function LeftSidebar() {
                     {filteredLibrary.map((item: CustomLibraryCadItem) => (
                       <div
                         key={item.id}
-                        className="group relative flex flex-col justify-between rounded-xl border border-sky-200 dark:border-sky-500/30 bg-white dark:bg-[#171a21] p-2 transition-all hover:border-sky-400 dark:hover:border-sky-400"
+                        draggable
+                        onDragStart={(e) => handleCadLibraryDragStart(e, item)}
+                        onDragEnd={() => setDraggedCadLibraryItem(null)}
+                        className="group relative flex flex-col justify-between rounded-xl border border-sky-200 dark:border-sky-500/30 bg-white dark:bg-[#171a21] p-2 transition-all hover:border-sky-400 dark:hover:border-sky-400 cursor-grab active:cursor-grabbing"
                       >
                         <div className="min-w-0">
                           <div className="flex items-center justify-between">
-                            <span className="rounded bg-sky-100 dark:bg-sky-950 px-1 py-0.2 font-mono text-[9px] font-bold text-sky-700 dark:text-sky-400">
+                            <span className="rounded bg-sky-100 dark:bg-sky-950 px-1 py-0.2 font-sans text-[9px] font-bold text-sky-700 dark:text-sky-400">
                               {item.format.toUpperCase()}
                             </span>
                             <div className="flex items-center gap-0.5">
@@ -881,7 +784,7 @@ export function LeftSidebar() {
                               {item.name}
                             </div>
                           )}
-                          <div className="font-mono text-[10px] text-[#64748b] dark:text-slate-400">
+                          <div className="font-sans text-[10px] text-[#64748b] dark:text-slate-400">
                             {formatDim(item.boundingBoxMm.w, displayUnit, 0)}×
                             {formatDim(item.boundingBoxMm.h, displayUnit, 0)} ·{" "}
                             {item.pins.length}P
@@ -891,7 +794,7 @@ export function LeftSidebar() {
                         <button
                           type="button"
                           onClick={() => handleInstantiateFromLibrary(item)}
-                          className="mt-2 flex w-full items-center justify-center gap-1 rounded-md bg-sky-600 hover:bg-sky-500 py-1 font-mono text-[10px] font-semibold text-white transition-colors"
+                          className="mt-2 flex w-full items-center justify-center gap-1 rounded-md bg-sky-600 hover:bg-sky-500 py-1 font-sans text-[10px] font-semibold text-white transition-colors"
                         >
                           <Plus className="h-3 w-3" /> Place
                         </button>
@@ -913,34 +816,42 @@ export function LeftSidebar() {
               return (
                 <div
                   key={cat}
-                  className="rounded-xl border border-[#e2e8f0] dark:border-white/10 bg-white dark:bg-[#131620]/70 p-2.5 space-y-2 shadow-xs"
+                  className="rounded-xl border border-slate-200 dark:border-white/5 bg-transparent overflow-hidden transition-colors"
                 >
                   <button
                     type="button"
                     onClick={() => toggleCategory(cat)}
-                    className="flex w-full items-center justify-between font-mono text-[11px] font-semibold uppercase tracking-wider text-[#334155] dark:text-slate-300"
+                    className="w-full px-2.5 py-1.5 flex items-center gap-1.5 text-left text-[11px] font-medium text-slate-700 hover:text-slate-900 hover:bg-slate-100 dark:text-zinc-300 dark:hover:text-white dark:hover:bg-white/5 transition-colors cursor-pointer"
                   >
-                    <span className="flex items-center gap-1.5">
-                      <ChevronDown
-                        className={`h-3.5 w-3.5 transition-transform ${
-                          isOpen ? "" : "-rotate-90"
-                        }`}
-                      />
-                      {cat}
-                    </span>
-                    <span className="rounded-full bg-[#f1f5f9] dark:bg-white/5 px-2 py-0.5 text-[10px] text-[#64748b] dark:text-slate-400">
-                      {catItems.length}
+                    <ChevronDown
+                      className={`h-3 w-3 text-zinc-400 shrink-0 transition-transform ${
+                        isOpen ? "" : "-rotate-90"
+                      }`}
+                    />
+                    {CATEGORY_ICONS[cat]}
+                    <span className="truncate">{cat}</span>
+                    <span className="text-[10px] text-zinc-400 dark:text-zinc-500 font-sans font-normal shrink-0">
+                      ({catItems.length})
                     </span>
                   </button>
 
                   {isOpen && (
-                    <div className="grid grid-cols-2 gap-2 pt-1">
+                    <div className="p-1.5 grid grid-cols-2 gap-1.5">
                       {catItems.map((tpl) => {
                         const isFav = favoritePartIds.includes(tpl.id);
                         return (
                           <div
                             key={tpl.id}
-                            className="group relative flex flex-col items-center justify-between rounded-xl border border-[#e2e8f0] dark:border-white/10 bg-[#f8fafc] dark:bg-[#171a21] p-2 text-center transition-all hover:border-[#cbd5e1] dark:hover:border-white/25 hover:bg-[#f1f5f9] dark:hover:bg-[#1d212b]"
+                            draggable
+                            onDragStart={(e) => handlePartDragStart(e, tpl.id)}
+                            onMouseEnter={(e) =>
+                              setHoveredPart({
+                                tpl,
+                                rect: e.currentTarget.getBoundingClientRect(),
+                              })
+                            }
+                            onMouseLeave={() => setHoveredPart(null)}
+                            className="group relative p-2 rounded-lg cursor-grab active:cursor-grabbing flex flex-col items-center justify-center text-center transition-all bg-transparent border border-transparent hover:bg-slate-100 hover:border-slate-200 dark:hover:bg-white/5 dark:hover:border-white/10"
                           >
                             <button
                               type="button"
@@ -950,7 +861,7 @@ export function LeftSidebar() {
                               }}
                               title={isFav ? "Remove from Favorites" : "Add to Favorites"}
                               aria-label={isFav ? `Unfavorite ${tpl.shortName}` : `Favorite ${tpl.shortName}`}
-                              className={`absolute top-1 right-1 z-10 rounded-full p-1 transition-colors ${
+                              className={`absolute top-1 right-1 z-10 rounded-full p-1 transition-colors cursor-pointer ${
                                 isFav
                                   ? "text-amber-500"
                                   : "text-[#94a3b8] opacity-0 group-hover:opacity-100 hover:text-amber-500"
@@ -965,24 +876,17 @@ export function LeftSidebar() {
                             <button
                               type="button"
                               onClick={() => handleAddComponent(tpl.id)}
-                              title={`Add ${tpl.name} (${tpl.widthMm}×${tpl.heightMm}mm)`}
-                              className="w-full flex flex-col items-center active:scale-[0.98]"
+                              className="w-full flex flex-col items-center active:scale-[0.98] cursor-pointer"
                             >
-                              <div className="flex h-10 w-full items-center justify-center">
+                              <div className="w-10 h-10 flex items-center justify-center p-1 mb-1.5 bg-transparent">
                                 <PartVectorIcon
                                   templateId={tpl.id}
                                   accentColor={tpl.accentColor}
                                 />
                               </div>
-                              <div className="mt-1.5 w-full">
-                                <div className="truncate text-[12px] font-medium text-[#0f172a] dark:text-slate-100 group-hover:text-[#0f172a] dark:group-hover:text-white">
-                                  {tpl.shortName}
-                                </div>
-                                <div className="mt-0.5 font-mono text-[10px] tabular-nums text-[#64748b] dark:text-slate-500">
-                                  {formatDim(tpl.widthMm, displayUnit, 0)} ×{" "}
-                                  {formatDim(tpl.heightMm, displayUnit, 0)}
-                                </div>
-                              </div>
+                              <span className="text-[11px] font-medium truncate w-full text-slate-700 group-hover:text-slate-900 dark:text-zinc-300 dark:group-hover:text-white transition-colors">
+                                {tpl.shortName}
+                              </span>
                             </button>
                           </div>
                         );
@@ -1001,293 +905,10 @@ export function LeftSidebar() {
           </div>
         )}
 
-        {activeTab === "rails" && (
-          <div className="space-y-2.5">
-            {/* DIN Rails Accordion Card */}
-            <div className="rounded-xl border border-[#e2e8f0] dark:border-white/10 bg-white dark:bg-[#131620]/70 p-2.5 space-y-2 shadow-xs">
-              <div className="flex items-center justify-between">
-                <button
-                  type="button"
-                  onClick={() => setRailsOpen((v) => !v)}
-                  className="flex items-center gap-1.5 font-mono text-[11px] font-semibold uppercase tracking-wider text-[#334155] dark:text-slate-300"
-                >
-                  <ChevronDown
-                    className={`h-3.5 w-3.5 transition-transform ${
-                      railsOpen ? "" : "-rotate-90"
-                    }`}
-                  />
-                  DIN Rails (35mm)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => addRail()}
-                  className="flex items-center gap-1 rounded-full bg-[#0f172a] dark:bg-white px-2.5 py-0.5 text-[11px] font-semibold text-white dark:text-black hover:bg-[#334155] dark:hover:bg-slate-200 transition-colors"
-                >
-                  <Plus className="h-3 w-3" /> Add
-                </button>
-              </div>
-
-              {railsOpen && (
-                <div className="space-y-1.5 pt-1">
-                  {filteredRails.map((rail) => (
-                    <div
-                      key={rail.id}
-                      onClick={() => setSelected({ kind: "rail", id: rail.id })}
-                      className={`flex cursor-pointer items-center justify-between rounded-lg border px-2.5 py-1.5 transition-colors ${
-                        selected?.kind === "rail" && selected.id === rail.id
-                          ? "border-[#0284c7] bg-[#e0f2fe] text-[#0369a1] dark:border-white/35 dark:bg-[#343842]/70 dark:text-slate-200"
-                          : "border-[#e2e8f0] dark:border-white/10 bg-[#f8fafc] dark:bg-[#171a21] hover:border-[#cbd5e1] dark:hover:border-white/20"
-                      }`}
-                    >
-                      <div className="min-w-0">
-                        <div className="truncate text-[13px] font-medium text-[#0f172a] dark:text-slate-200">
-                          {rail.name}
-                        </div>
-                        <div className="font-mono text-[11px] tabular-nums text-[#64748b] dark:text-slate-400">
-                          L={formatDim(rail.lengthMm, displayUnit)} · Y=
-                          {formatDim(rail.yMm, displayUnit)}
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          removeRail(rail.id);
-                        }}
-                        className="p-1 text-[#94a3b8] dark:text-slate-500 hover:text-rose-500 dark:hover:text-rose-400"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Wire Ducts Accordion Card */}
-            <div className="rounded-xl border border-[#e2e8f0] dark:border-white/10 bg-white dark:bg-[#131620]/70 p-2.5 space-y-2 shadow-xs">
-              <div className="flex items-center justify-between">
-                <button
-                  type="button"
-                  onClick={() => setDuctsOpen((v) => !v)}
-                  className="flex items-center gap-1.5 font-mono text-[11px] font-semibold uppercase tracking-wider text-[#334155] dark:text-slate-300"
-                >
-                  <ChevronDown
-                    className={`h-3.5 w-3.5 transition-transform ${
-                      ductsOpen ? "" : "-rotate-90"
-                    }`}
-                  />
-                  Wire Ducts
-                </button>
-                <div className="flex gap-1">
-                  <button
-                    type="button"
-                    onClick={() => addDuct("horizontal")}
-                    className="rounded-full border border-[#e2e8f0] dark:border-white/10 bg-[#f8fafc] dark:bg-[#171a21] px-2.5 py-0.5 text-[11px] font-medium text-[#0f172a] dark:text-slate-200 hover:border-[#cbd5e1] dark:hover:border-white/25 hover:bg-[#f1f5f9] dark:hover:bg-white/10"
-                  >
-                    + H
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => addDuct("vertical")}
-                    className="rounded-full border border-[#e2e8f0] dark:border-white/10 bg-[#f8fafc] dark:bg-[#171a21] px-2.5 py-0.5 text-[11px] font-medium text-[#0f172a] dark:text-slate-200 hover:border-[#cbd5e1] dark:hover:border-white/25 hover:bg-[#f1f5f9] dark:hover:bg-white/10"
-                  >
-                    + V
-                  </button>
-                </div>
-              </div>
-
-              {ductsOpen && (
-                <div className="space-y-1.5 pt-1">
-                  {filteredDucts.map((duct) => (
-                    <div
-                      key={duct.id}
-                      onClick={() => setSelected({ kind: "duct", id: duct.id })}
-                      className={`flex cursor-pointer items-center justify-between rounded-lg border px-2.5 py-1.5 transition-colors ${
-                        selected?.kind === "duct" && selected.id === duct.id
-                          ? "border-[#0284c7] bg-[#e0f2fe] text-[#0369a1] dark:border-white/35 dark:bg-[#343842]/70 dark:text-slate-200"
-                          : "border-[#e2e8f0] dark:border-white/10 bg-[#f8fafc] dark:bg-[#171a21] hover:border-[#cbd5e1] dark:hover:border-white/20"
-                      }`}
-                    >
-                      <div className="min-w-0">
-                        <div className="truncate text-[13px] font-medium text-[#0f172a] dark:text-slate-200">
-                          {duct.name}
-                        </div>
-                        <div className="font-mono text-[11px] tabular-nums text-[#64748b] dark:text-slate-400">
-                          {formatDim(duct.widthMm, displayUnit)} ×{" "}
-                          {formatDim(duct.heightMm, displayUnit)}
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          removeDuct(duct.id);
-                        }}
-                        className="p-1 text-[#94a3b8] dark:text-slate-500 hover:text-rose-500 dark:hover:text-rose-400"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {activeTab === "enclosure" && (
-          <div className="space-y-3">
-            <div className="rounded-xl border border-[#e2e8f0] dark:border-white/10 bg-white dark:bg-[#131620]/70 p-3 space-y-2.5 shadow-xs">
-              <div className="font-mono text-[11px] font-semibold uppercase tracking-wider text-[#64748b] dark:text-slate-400">
-                Enclosure Dimensions ({displayUnit})
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                {(
-                  [
-                    ["Width (W)", "widthMm"],
-                    ["Height (H)", "heightMm"],
-                    ["Depth (D)", "depthMm"],
-                    ["Inset", "backplateInsetMm"],
-                  ] as const
-                ).map(([label, key]) => (
-                  <label key={key} className="block space-y-1">
-                    <span className="text-xs text-[#64748b] dark:text-slate-400">{label}</span>
-                    <input
-                      type="number"
-                      step={step}
-                      value={Number(
-                        fromMm(enclosure[key], displayUnit).toFixed(3)
-                      )}
-                      onChange={(e) => {
-                        const mm = toMm(
-                          Number.parseFloat(e.target.value) || 0,
-                          displayUnit
-                        );
-                        updateEnclosure({ [key]: Math.max(20, mm) });
-                      }}
-                      className="w-full rounded-lg border border-[#e2e8f0] dark:border-white/10 bg-[#f8fafc] dark:bg-[#171a21] px-2.5 py-1.5 font-mono text-[13px] tabular-nums text-[#0f172a] dark:text-slate-100 focus:border-[#0284c7] dark:focus:border-white/30 focus:outline-none"
-                    />
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-[#e2e8f0] dark:border-white/10 bg-white dark:bg-[#131620]/70 p-3 space-y-2.5 shadow-xs">
-              <div className="flex items-center justify-between">
-                <span className="font-mono text-[11px] font-semibold uppercase tracking-wider text-[#64748b] dark:text-slate-400">
-                  Mounting Plate
-                </span>
-                <div className="flex rounded-full border border-[#e2e8f0] dark:border-white/10 bg-[#f1f5f9] dark:bg-[#171a21] p-0.5 text-[11px] font-mono">
-                  <button
-                    type="button"
-                    onClick={() => updatePlateConfig({ mode: "auto" })}
-                    className={`rounded-full px-2.5 py-0.5 transition-colors ${
-                      plateConfig.mode === "auto"
-                        ? "bg-[#0f172a] text-white dark:bg-white dark:text-black font-semibold shadow-xs"
-                        : "text-[#64748b] dark:text-slate-400 hover:text-[#0f172a] dark:hover:text-slate-200"
-                    }`}
-                  >
-                    Auto
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      updatePlateConfig({
-                        mode: "manual",
-                        manualWidthMm:
-                          plateConfig.mode === "auto"
-                            ? Math.max(
-                                100,
-                                enclosure.widthMm -
-                                  enclosure.backplateInsetMm * 2
-                              )
-                            : plateConfig.manualWidthMm,
-                        manualHeightMm:
-                          plateConfig.mode === "auto"
-                            ? Math.max(
-                                100,
-                                enclosure.heightMm -
-                                  enclosure.backplateInsetMm * 2
-                              )
-                            : plateConfig.manualHeightMm,
-                      })
-                    }
-                    className={`rounded-full px-2.5 py-0.5 transition-colors ${
-                      plateConfig.mode === "manual"
-                        ? "bg-[#0f172a] text-white dark:bg-white dark:text-black font-semibold shadow-xs"
-                        : "text-[#64748b] dark:text-slate-400 hover:text-[#0f172a] dark:hover:text-slate-200"
-                    }`}
-                  >
-                    Manual
-                  </button>
-                </div>
-              </div>
-
-              {plateConfig.mode === "manual" ? (
-                <div className="grid grid-cols-2 gap-2">
-                  <label className="block space-y-1">
-                    <span className="text-xs text-[#64748b] dark:text-slate-400">
-                      Plate W ({displayUnit})
-                    </span>
-                    <input
-                      type="number"
-                      step={step}
-                      value={Number(
-                        fromMm(plateConfig.manualWidthMm, displayUnit).toFixed(
-                          3
-                        )
-                      )}
-                      onChange={(e) => {
-                        const mm = toMm(
-                          Number.parseFloat(e.target.value) || 0,
-                          displayUnit
-                        );
-                        updatePlateConfig({ manualWidthMm: Math.max(100, mm) });
-                      }}
-                      className="w-full rounded-lg border border-[#e2e8f0] dark:border-white/10 bg-[#f8fafc] dark:bg-[#171a21] px-2.5 py-1.5 font-mono text-[13px] tabular-nums text-[#0f172a] dark:text-slate-100 focus:border-[#0284c7] dark:focus:border-white/30 focus:outline-none"
-                    />
-                  </label>
-                  <label className="block space-y-1">
-                    <span className="text-xs text-[#64748b] dark:text-slate-400">
-                      Plate H ({displayUnit})
-                    </span>
-                    <input
-                      type="number"
-                      step={step}
-                      value={Number(
-                        fromMm(plateConfig.manualHeightMm, displayUnit).toFixed(
-                          3
-                        )
-                      )}
-                      onChange={(e) => {
-                        const mm = toMm(
-                          Number.parseFloat(e.target.value) || 0,
-                          displayUnit
-                        );
-                        updatePlateConfig({
-                          manualHeightMm: Math.max(100, mm),
-                        });
-                      }}
-                      className="w-full rounded-lg border border-[#e2e8f0] dark:border-white/10 bg-[#f8fafc] dark:bg-[#171a21] px-2.5 py-1.5 font-mono text-[13px] tabular-nums text-[#0f172a] dark:text-slate-100 focus:border-[#0284c7] dark:focus:border-white/30 focus:outline-none"
-                    />
-                  </label>
-                </div>
-              ) : (
-                <div className="rounded-lg border border-[#e2e8f0] dark:border-white/5 bg-[#f8fafc] dark:bg-[#171a21] px-2.5 py-1.5 font-mono text-xs tabular-nums text-[#334155] dark:text-slate-300">
-                  {formatDim(plateW, displayUnit)} ×{" "}
-                  {formatDim(plateH, displayUnit)}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
         {activeTab === "cad" && (
           <div className="space-y-3">
             <div className="rounded-xl border border-[#e2e8f0] dark:border-white/10 bg-white dark:bg-[#131620]/70 p-3 space-y-2.5 shadow-xs">
-              <div className="font-mono text-[11px] font-semibold uppercase tracking-wider text-[#64748b] dark:text-slate-400">
+              <div className="font-sans text-[11px] font-semibold uppercase tracking-wider text-[#64748b] dark:text-slate-400">
                 Custom CAD Importer
               </div>
 
@@ -1300,7 +921,7 @@ export function LeftSidebar() {
                   onChange={(e) =>
                     setCadImportUnit(e.target.value as CadImportUnit)
                   }
-                  className="w-full rounded-lg border border-[#e2e8f0] dark:border-white/10 bg-[#f8fafc] dark:bg-[#171a21] px-2.5 py-1.5 font-mono text-[13px] text-[#0f172a] dark:text-slate-100 focus:border-[#0284c7] dark:focus:border-white/30 focus:outline-none"
+                  className="w-full rounded-lg border border-[#e2e8f0] dark:border-white/10 bg-[#f8fafc] dark:bg-[#171a21] px-2.5 py-1.5 font-sans text-xs text-[#0f172a] dark:text-slate-100 focus:border-[#0284c7] dark:focus:border-white/30 focus:outline-none"
                 >
                   <option value="mm">Millimeters (mm)</option>
                   <option value="cm">Centimeters (cm)</option>
@@ -1311,10 +932,10 @@ export function LeftSidebar() {
 
               <label className="flex cursor-pointer flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-[#cbd5e1] dark:border-white/15 bg-[#f8fafc] dark:bg-[#171a21] p-4 text-center transition-colors hover:border-[#0284c7] dark:hover:border-white/35">
                 <FileUp className="h-5 w-5 text-[#64748b] dark:text-slate-300" />
-                <span className="text-[13px] font-medium text-[#0f172a] dark:text-slate-200">
+                <span className="text-xs font-medium text-[#0f172a] dark:text-slate-200">
                   Upload .GLB / .GLTF / .OBJ / .DXF
                 </span>
-                <span className="font-mono text-[11px] text-[#94a3b8] dark:text-slate-500">
+                <span className="font-sans text-[11px] text-[#94a3b8] dark:text-slate-500">
                   Auto-normalized to canonical mm
                 </span>
                 <input
@@ -1328,7 +949,7 @@ export function LeftSidebar() {
               <button
                 type="button"
                 onClick={() => setShowImageToCadModal(true)}
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-sky-500/30 bg-sky-500/10 hover:bg-sky-500/20 text-sky-600 dark:text-sky-400 p-2.5 text-center transition-colors font-medium text-[13px]"
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-sky-500/30 bg-sky-500/10 hover:bg-sky-500/20 text-sky-600 dark:text-sky-400 p-2.5 text-center transition-colors font-medium text-xs"
               >
                 <ImageIcon className="h-4 w-4" />
                 <span>Image Component Creator</span>
@@ -1383,14 +1004,14 @@ export function LeftSidebar() {
                                   setEditingCadId(null);
                                 }
                               }}
-                              className="w-full rounded border border-sky-400 bg-white dark:bg-[#0c0e14] px-1.5 py-0.5 text-[13px] font-medium text-[#0f172a] dark:text-slate-100 focus:outline-none"
+                              className="w-full rounded border border-sky-400 bg-white dark:bg-[#0c0e14] px-1.5 py-0.5 text-xs font-medium text-[#0f172a] dark:text-slate-100 focus:outline-none"
                             />
                           ) : (
-                            <div className="truncate text-[13px] font-medium text-[#0f172a] dark:text-slate-200">
+                            <div className="truncate text-xs font-medium text-[#0f172a] dark:text-slate-200">
                               {asset.name}
                             </div>
                           )}
-                          <div className="font-mono text-[11px] text-[#64748b] dark:text-slate-400">
+                          <div className="font-sans text-[11px] text-[#64748b] dark:text-slate-400">
                             [{asset.format.toUpperCase()}] · {asset.pins.length}{" "}
                             pins
                           </div>
@@ -1431,7 +1052,7 @@ export function LeftSidebar() {
                           setSelected({ kind: "cad", id: asset.id });
                           setPinMarkingMode(!markingThis, asset.id);
                         }}
-                        className={`flex-1 rounded-md py-1.5 font-mono text-[11px] font-semibold transition-colors ${
+                        className={`flex-1 rounded-md py-1.5 font-sans text-[11px] font-semibold transition-colors ${
                           markingThis
                             ? "bg-amber-500 text-black font-bold"
                             : "border border-[#e2e8f0] dark:border-white/10 bg-[#f1f5f9] dark:bg-[#0c0e14] text-[#334155] dark:text-slate-300 hover:border-[#cbd5e1] dark:hover:border-white/25"
@@ -1447,7 +1068,7 @@ export function LeftSidebar() {
                           handleSaveToLibrary(asset);
                         }}
                         title="Save CAD asset + marked pins to My Library (IndexedDB)"
-                        className={`flex-1 rounded-md py-1.5 font-mono text-[11px] font-semibold transition-colors ${
+                        className={`flex-1 rounded-md py-1.5 font-sans text-[11px] font-semibold transition-colors ${
                           savedToastId === asset.id
                             ? "bg-emerald-600 text-white"
                             : "border border-sky-300 dark:border-sky-500/30 bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 hover:bg-sky-100 dark:hover:bg-sky-900/60"
@@ -1474,6 +1095,106 @@ export function LeftSidebar() {
         )}
       </div>
     </aside>
+
+    {/* Floating Rich Popover Card on Part Hover (RelayTest style) */}
+    {hoveredPart &&
+      (() => {
+        const { tpl, rect } = hoveredPart;
+        const screenW = typeof window !== "undefined" ? window.innerWidth : 1200;
+        const screenH = typeof window !== "undefined" ? window.innerHeight : 800;
+        const cardW = 260;
+        let left = rect.right + 12;
+        if (left + cardW > screenW - 12) {
+          left = Math.max(12, rect.left - cardW - 12);
+        }
+        const top = Math.max(16, Math.min(screenH - 190, rect.top - 12));
+
+        return (
+          <div
+            style={{
+              position: "fixed",
+              left: `${left}px`,
+              top: `${top}px`,
+              width: `${cardW}px`,
+              zIndex: 9999,
+            }}
+            className="pointer-events-none rounded-xl border p-3 shadow-2xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-100 flex flex-col gap-2 select-none bg-white/98 border-zinc-200 text-zinc-900 shadow-zinc-950/15 ring-1 ring-black/5 dark:bg-[#0f1219]/95 dark:border-zinc-800/90 dark:text-zinc-100 dark:shadow-black/80 dark:ring-1 dark:ring-white/10"
+          >
+            <div className="flex items-start justify-between gap-2 pb-2 border-b border-zinc-200 dark:border-zinc-800">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                  <span className="text-[9px] font-sans uppercase tracking-wider font-bold px-1.5 py-0.5 rounded border bg-zinc-100 text-zinc-700 border-zinc-300 dark:bg-zinc-800 dark:text-zinc-300 dark:border-zinc-700">
+                    {tpl.mountingType === "din_rail"
+                      ? "DIN Rail"
+                      : tpl.mountingType === "screw_plate"
+                      ? "Screw Plate"
+                      : tpl.mountingType === "parent_mount"
+                      ? "Plug-In"
+                      : "Door Cutout"}
+                  </span>
+                  <span className="text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded bg-slate-900 text-white dark:bg-white dark:text-slate-900">
+                    {tpl.tagPrefix}
+                  </span>
+                </div>
+                <h4 className="font-bold text-xs tracking-tight leading-snug text-zinc-900 dark:text-zinc-100">
+                  {tpl.name}
+                </h4>
+                <p className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate mt-0.5">
+                  {tpl.referenceModel}
+                </p>
+              </div>
+              <div className="w-9 h-9 shrink-0 flex items-center justify-center rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/60 p-1">
+                <PartVectorIcon
+                  templateId={tpl.id}
+                  accentColor={tpl.accentColor}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 text-[11px]">
+              <div>
+                <span className="block text-[9px] font-sans uppercase text-zinc-400">
+                  Dimensions (W×H×D)
+                </span>
+                <span className="font-sans font-medium text-zinc-800 dark:text-zinc-200">
+                  {formatDim(tpl.widthMm, displayUnit, 1)} ×{" "}
+                  {formatDim(tpl.heightMm, displayUnit, 1)} ×{" "}
+                  {formatDim(tpl.depthMm, displayUnit, 1)}
+                </span>
+              </div>
+              <div>
+                <span className="block text-[9px] font-sans uppercase text-zinc-400">
+                  Terminals
+                </span>
+                <span className="font-sans font-medium text-zinc-800 dark:text-zinc-200">
+                  {tpl.pins.length} pins
+                </span>
+              </div>
+            </div>
+
+            {(tpl.behavior?.clearanceMm || tpl.behavior?.cutoutSummary || tpl.behavior?.sideBySideSnap) && (
+              <div className="pt-1.5 border-t border-zinc-200 dark:border-zinc-800 flex flex-wrap gap-1 text-[10px] text-zinc-600 dark:text-zinc-400">
+                {tpl.behavior?.sideBySideSnap && (
+                  <span className="rounded bg-zinc-100 dark:bg-zinc-800/80 px-1.5 py-0.5">
+                    0mm Side Snap
+                  </span>
+                )}
+                {tpl.behavior?.clearanceMm && (
+                  <span className="rounded bg-zinc-100 dark:bg-zinc-800/80 px-1.5 py-0.5">
+                    Clearance ↑{tpl.behavior.clearanceMm.top ?? 0}/↓{tpl.behavior.clearanceMm.bottom ?? 0}mm
+                  </span>
+                )}
+                {tpl.behavior?.cutoutSummary && (
+                  <span className="rounded bg-zinc-100 dark:bg-zinc-800/80 px-1.5 py-0.5">
+                    Cutout: {tpl.behavior.cutoutSummary}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
     {showImageToCadModal && (
       <ImageToCadModal onClose={() => setShowImageToCadModal(false)} />
     )}

@@ -148,4 +148,55 @@ describe("wire-router", () => {
     // Interior waypoints should have different coordinate offsets
     expect(wire0).not.toEqual(wire1);
   });
+
+  it("routes bottom pin downward and avoids cutting through component bodies", () => {
+    const ductsWithBottom: WireDuct[] = [
+      ...sampleDucts,
+      {
+        id: "duct-bottom",
+        name: "Bottom Duct",
+        xMm: 0,
+        yMm: -220,
+        widthMm: 480,
+        heightMm: 40,
+        depthMm: 60,
+        orientation: "horizontal",
+      },
+    ];
+    // Contactor body centered at (20, 40), size 45x77 -> y: [1.5 .. 78.5], bottom pin at (7, 8)
+    const contactorBox = {
+      id: "km1",
+      minX: -1,
+      maxX: 41,
+      minY: 3,
+      maxY: 77,
+    };
+    const pts = routeWireThroughDucts(
+      { x: 7, y: 8 },
+      { x: -160, y: 236 },
+      ductsWithBottom,
+      [],
+      0,
+      {
+        startExitDir: "down",
+        endExitDir: "up",
+        startStubPt: { x: 7, y: -3.5 },
+        endStubPt: { x: -160, y: 247.5 },
+        obstacles: [contactorBox],
+      }
+    );
+
+    // First segment from bottom pin (7, 8) must exit downward to stub (7, -3.5), never upward through y=40
+    expect(pts[1].y).toBeLessThan(8);
+    // No segment after stub should pass through the middle of the contactor body (y=40, x in [0..40])
+    for (let i = 1; i < pts.length - 1; i++) {
+      const a = pts[i];
+      const b = pts[i + 1];
+      if (Math.abs(a.x - b.x) < 0.1 && a.x > contactorBox.minX && a.x < contactorBox.maxX) {
+        const loY = Math.min(a.y, b.y);
+        const hiY = Math.max(a.y, b.y);
+        expect(hiY > contactorBox.minY && loY < contactorBox.maxY).toBe(false);
+      }
+    }
+  });
 });

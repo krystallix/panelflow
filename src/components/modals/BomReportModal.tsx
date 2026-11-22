@@ -10,9 +10,9 @@ import {
   Layers,
   Printer,
   Sparkles,
-  X,
   Zap,
 } from "lucide-react";
+import { Badge, Button, Modal } from "@/components/ui";
 import {
   generateBomCsv,
   generateBomReport,
@@ -230,10 +230,14 @@ export function BomReportModal({ onClose }: BomReportModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 select-none animate-in fade-in duration-150">
-      <div className="flex flex-col h-[90vh] max-h-[820px] w-full max-w-5xl rounded-2xl border border-[#cbd5e1] dark:border-white/10 bg-white dark:bg-[#0f1219] shadow-2xl overflow-hidden text-[#0f172a] dark:text-slate-100">
+    <Modal
+      isOpen={true}
+      onClose={onClose}
+      maxWidthClassName="max-w-5xl"
+      className="flex flex-col h-[90vh] max-h-[820px] p-0 overflow-hidden text-[#0f172a] dark:text-slate-100"
+    >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-[#e2e8f0] dark:border-white/10 px-6 py-4 bg-[#f8fafc]/80 dark:bg-[#151922]/80 backdrop-blur-md">
+        <div className="flex items-center justify-between border-b border-[#e2e8f0] dark:border-white/10 px-6 py-4 bg-[#f8fafc]/80 dark:bg-[#151922]/80 backdrop-blur-md shrink-0">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-sky-200 dark:border-sky-500/30 bg-sky-50 dark:bg-sky-500/10 text-sky-600 dark:text-sky-400">
               <ClipboardList className="h-5 w-5" />
@@ -243,9 +247,9 @@ export function BomReportModal({ onClose }: BomReportModalProps) {
                 <h2 className="text-base font-bold tracking-tight text-[#0f172a] dark:text-white">
                   BOM & Wire Cutting Schedule
                 </h2>
-                <span className="rounded-md border border-[#cbd5e1] dark:border-white/10 bg-[#e2e8f0]/60 dark:bg-white/5 px-2 py-0.5 font-mono text-[10px] font-semibold text-[#475569] dark:text-slate-300">
+                <Badge variant="neutral" className="font-sans text-[10px] rounded-md">
                   CAD REPORT
-                </span>
+                </Badge>
               </div>
               <p className="text-xs text-[#64748b] dark:text-slate-400">
                 Precision manufacturing takeoff, DIN rail allocation, and wire cut lengths
@@ -259,7 +263,7 @@ export function BomReportModal({ onClose }: BomReportModalProps) {
               <button
                 type="button"
                 onClick={() => setScope("active")}
-                className={`rounded-lg px-3 py-1 transition-all ${
+                className={`rounded-lg px-3 py-1 transition-all cursor-pointer ${
                   scope === "active"
                     ? "bg-white dark:bg-[#1e2330] text-[#0f172a] dark:text-white font-semibold shadow-xs"
                     : "text-[#64748b] dark:text-slate-400 hover:text-[#0f172a] dark:hover:text-white"
@@ -270,7 +274,7 @@ export function BomReportModal({ onClose }: BomReportModalProps) {
               <button
                 type="button"
                 onClick={() => setScope("all")}
-                className={`rounded-lg px-3 py-1 transition-all ${
+                className={`rounded-lg px-3 py-1 transition-all cursor-pointer ${
                   scope === "all"
                     ? "bg-white dark:bg-[#1e2330] text-[#0f172a] dark:text-white font-semibold shadow-xs"
                     : "text-[#64748b] dark:text-slate-400 hover:text-[#0f172a] dark:hover:text-white"
@@ -280,69 +284,73 @@ export function BomReportModal({ onClose }: BomReportModalProps) {
               </button>
             </div>
 
-            <button
-              type="button"
+            <Button
+              variant="outline"
+              size="icon"
               onClick={onClose}
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#e2e8f0] dark:border-white/10 text-[#64748b] dark:text-slate-400 hover:bg-[#f1f5f9] dark:hover:bg-white/10 hover:text-[#0f172a] dark:hover:text-white transition-colors"
+              title="Close"
             >
-              <X className="h-4 w-4" />
-            </button>
+              <span className="sr-only">Close</span>
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M18 6 6 18M6 6l12 12" />
+              </svg>
+            </Button>
           </div>
         </div>
 
         {/* Summary Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 px-6 py-4 border-b border-[#e2e8f0] dark:border-white/10 bg-[#fbfcfd] dark:bg-[#11141c]">
           <div className="rounded-xl border border-[#e2e8f0] dark:border-white/10 bg-white dark:bg-[#171b26] p-3 shadow-xs">
-            <span className="block font-mono text-[10px] font-bold uppercase tracking-wider text-[#64748b] dark:text-slate-400">
+            <span className="block font-sans text-[10px] font-bold uppercase tracking-wider text-[#64748b] dark:text-slate-400">
               Total Components
             </span>
             <div className="mt-1 flex items-baseline gap-2">
               <span className="text-xl font-bold tracking-tight text-[#0f172a] dark:text-white">
                 {report.summary.totalComponents}
               </span>
-              <span className="font-mono text-xs text-[#64748b] dark:text-slate-400">
+              <span className="font-sans text-xs text-[#64748b] dark:text-slate-400">
                 ({report.summary.totalUniqueComponentTypes} types)
               </span>
             </div>
           </div>
 
           <div className="rounded-xl border border-[#e2e8f0] dark:border-white/10 bg-white dark:bg-[#171b26] p-3 shadow-xs">
-            <span className="block font-mono text-[10px] font-bold uppercase tracking-wider text-[#64748b] dark:text-slate-400">
+            <span className="block font-sans text-[10px] font-bold uppercase tracking-wider text-[#64748b] dark:text-slate-400">
               Total DIN Rail
             </span>
             <div className="mt-1 flex items-baseline gap-2">
               <span className="text-xl font-bold tracking-tight text-[#0f172a] dark:text-white">
                 {report.summary.totalDinRailLengthMm.toLocaleString()}
               </span>
-              <span className="font-mono text-xs text-[#64748b] dark:text-slate-400">
+              <span className="font-sans text-xs text-[#64748b] dark:text-slate-400">
                 mm ({report.summary.totalDinRailPieces} pcs)
               </span>
             </div>
           </div>
 
           <div className="rounded-xl border border-[#e2e8f0] dark:border-white/10 bg-white dark:bg-[#171b26] p-3 shadow-xs">
-            <span className="block font-mono text-[10px] font-bold uppercase tracking-wider text-[#64748b] dark:text-slate-400">
+            <span className="block font-sans text-[10px] font-bold uppercase tracking-wider text-[#64748b] dark:text-slate-400">
               Total Wires
             </span>
             <div className="mt-1 flex items-baseline gap-2">
               <span className="text-xl font-bold tracking-tight text-[#0f172a] dark:text-white">
                 {report.summary.totalWires}
               </span>
-              <span className="font-mono text-xs text-[#64748b] dark:text-slate-400">
+              <span className="font-sans text-xs text-[#64748b] dark:text-slate-400">
                 runs
               </span>
             </div>
           </div>
 
           <div className="rounded-xl border border-[#e2e8f0] dark:border-white/10 bg-white dark:bg-[#171b26] p-3 shadow-xs">
-            <span className="block font-mono text-[10px] font-bold uppercase tracking-wider text-[#64748b] dark:text-slate-400">
+            <span className="block font-sans text-[10px] font-bold uppercase tracking-wider text-[#64748b] dark:text-slate-400">
               Total Cable Length
             </span>
             <div className="mt-1 flex items-baseline gap-2">
               <span className="text-xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400">
                 {report.summary.totalCableLengthM}
               </span>
-              <span className="font-mono text-xs text-[#64748b] dark:text-slate-400">
+              <span className="font-sans text-xs text-[#64748b] dark:text-slate-400">
                 m ({report.summary.totalCableLengthMm.toLocaleString()} mm)
               </span>
             </div>
@@ -363,7 +371,7 @@ export function BomReportModal({ onClose }: BomReportModalProps) {
             >
               <FileSpreadsheet className="h-4 w-4" />
               Bill of Materials (BOM)
-              <span className="rounded-full bg-slate-500/20 px-1.5 py-0.2 font-mono text-[10px]">
+              <span className="rounded-full bg-slate-500/20 px-1.5 py-0.2 font-sans text-[10px]">
                 {report.components.length + report.dinRails.length + report.wireDucts.length}
               </span>
             </button>
@@ -379,7 +387,7 @@ export function BomReportModal({ onClose }: BomReportModalProps) {
             >
               <Cable className="h-4 w-4" />
               Wire Cutting List
-              <span className="rounded-full bg-slate-500/20 px-1.5 py-0.2 font-mono text-[10px]">
+              <span className="rounded-full bg-slate-500/20 px-1.5 py-0.2 font-sans text-[10px]">
                 {report.wires.length}
               </span>
             </button>
@@ -393,7 +401,7 @@ export function BomReportModal({ onClose }: BomReportModalProps) {
                 onClick={handleDownloadBomCsv}
                 className="flex items-center gap-1.5 rounded-xl border border-[#cbd5e1] dark:border-white/10 bg-[#f8fafc] dark:bg-[#181d28] px-3.5 py-1.5 text-xs font-medium text-[#0f172a] dark:text-slate-200 hover:bg-[#e2e8f0] dark:hover:bg-white/10 shadow-xs transition-colors"
               >
-                <Download className="h-3.5 w-3.5 text-sky-500" />
+                <Download className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
                 Download BOM (.csv)
               </button>
             ) : (
@@ -402,7 +410,7 @@ export function BomReportModal({ onClose }: BomReportModalProps) {
                 onClick={handleDownloadWireCsv}
                 className="flex items-center gap-1.5 rounded-xl border border-[#cbd5e1] dark:border-white/10 bg-[#f8fafc] dark:bg-[#181d28] px-3.5 py-1.5 text-xs font-medium text-[#0f172a] dark:text-slate-200 hover:bg-[#e2e8f0] dark:hover:bg-white/10 shadow-xs transition-colors"
               >
-                <Download className="h-3.5 w-3.5 text-emerald-500" />
+                <Download className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
                 Download Wire List (.csv)
               </button>
             )}
@@ -412,7 +420,7 @@ export function BomReportModal({ onClose }: BomReportModalProps) {
               onClick={handlePrintPdf}
               className="flex items-center gap-1.5 rounded-xl border border-[#cbd5e1] dark:border-white/10 bg-[#f8fafc] dark:bg-[#181d28] px-3.5 py-1.5 text-xs font-medium text-[#0f172a] dark:text-slate-200 hover:bg-[#e2e8f0] dark:hover:bg-white/10 shadow-xs transition-colors"
             >
-              <Printer className="h-3.5 w-3.5 text-amber-500" />
+              <Printer className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
               Print / PDF Report
             </button>
           </div>
@@ -425,13 +433,13 @@ export function BomReportModal({ onClose }: BomReportModalProps) {
               {/* Components Section */}
               <div className="overflow-hidden rounded-xl border border-[#e2e8f0] dark:border-white/10 bg-white dark:bg-[#141822] shadow-xs">
                 <div className="border-b border-[#e2e8f0] dark:border-white/10 bg-[#f8fafc] dark:bg-[#171b26] px-4 py-2.5">
-                  <span className="font-mono text-xs font-bold uppercase tracking-wider text-[#334155] dark:text-slate-300">
+                  <span className="font-sans text-xs font-bold uppercase tracking-wider text-[#334155] dark:text-slate-300">
                     Electrical Components ({report.components.length})
                   </span>
                 </div>
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
-                    <tr className="border-b border-[#e2e8f0] dark:border-white/10 text-[11px] font-mono uppercase text-[#64748b] dark:text-slate-400 bg-slate-50/60 dark:bg-white/5">
+                    <tr className="border-b border-[#e2e8f0] dark:border-white/10 text-[11px] font-sans uppercase text-[#64748b] dark:text-slate-400 bg-slate-50/60 dark:bg-white/5">
                       <th className="px-4 py-2 font-semibold">Tag</th>
                       <th className="px-4 py-2 font-semibold">Component</th>
                       <th className="px-4 py-2 font-semibold">Category</th>
@@ -440,7 +448,7 @@ export function BomReportModal({ onClose }: BomReportModalProps) {
                       <th className="px-4 py-2 font-semibold text-center">Qty</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-[#f1f5f9] dark:divide-white/5 font-mono text-[11px]">
+                  <tbody className="divide-y divide-[#f1f5f9] dark:divide-white/5 font-sans text-[11px]">
                     {report.components.length === 0 ? (
                       <tr>
                         <td colSpan={6} className="px-4 py-6 text-center text-[#64748b] dark:text-slate-400 font-sans">
@@ -480,19 +488,19 @@ export function BomReportModal({ onClose }: BomReportModalProps) {
                 {/* DIN Rails */}
                 <div className="overflow-hidden rounded-xl border border-[#e2e8f0] dark:border-white/10 bg-white dark:bg-[#141822] shadow-xs">
                   <div className="border-b border-[#e2e8f0] dark:border-white/10 bg-[#f8fafc] dark:bg-[#171b26] px-4 py-2.5">
-                    <span className="font-mono text-xs font-bold uppercase tracking-wider text-[#334155] dark:text-slate-300">
+                    <span className="font-sans text-xs font-bold uppercase tracking-wider text-[#334155] dark:text-slate-300">
                       DIN Rail 35mm ({report.dinRails.length})
                     </span>
                   </div>
                   <table className="w-full text-left text-xs border-collapse">
                     <thead>
-                      <tr className="border-b border-[#e2e8f0] dark:border-white/10 text-[11px] font-mono uppercase text-[#64748b] dark:text-slate-400 bg-slate-50/60 dark:bg-white/5">
+                      <tr className="border-b border-[#e2e8f0] dark:border-white/10 text-[11px] font-sans uppercase text-[#64748b] dark:text-slate-400 bg-slate-50/60 dark:bg-white/5">
                         <th className="px-4 py-2 font-semibold">Rail Spec</th>
                         <th className="px-4 py-2 font-semibold text-center">Qty</th>
                         <th className="px-4 py-2 font-semibold text-right">Total Length</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-[#f1f5f9] dark:divide-white/5 font-mono text-[11px]">
+                    <tbody className="divide-y divide-[#f1f5f9] dark:divide-white/5 font-sans text-[11px]">
                       {report.dinRails.length === 0 ? (
                         <tr>
                           <td colSpan={3} className="px-4 py-4 text-center text-[#64748b] dark:text-slate-400 font-sans">
@@ -521,19 +529,19 @@ export function BomReportModal({ onClose }: BomReportModalProps) {
                 {/* Wire Ducts */}
                 <div className="overflow-hidden rounded-xl border border-[#e2e8f0] dark:border-white/10 bg-white dark:bg-[#141822] shadow-xs">
                   <div className="border-b border-[#e2e8f0] dark:border-white/10 bg-[#f8fafc] dark:bg-[#171b26] px-4 py-2.5">
-                    <span className="font-mono text-xs font-bold uppercase tracking-wider text-[#334155] dark:text-slate-300">
+                    <span className="font-sans text-xs font-bold uppercase tracking-wider text-[#334155] dark:text-slate-300">
                       Slotted Wire Ducts ({report.wireDucts.length})
                     </span>
                   </div>
                   <table className="w-full text-left text-xs border-collapse">
                     <thead>
-                      <tr className="border-b border-[#e2e8f0] dark:border-white/10 text-[11px] font-mono uppercase text-[#64748b] dark:text-slate-400 bg-slate-50/60 dark:bg-white/5">
+                      <tr className="border-b border-[#e2e8f0] dark:border-white/10 text-[11px] font-sans uppercase text-[#64748b] dark:text-slate-400 bg-slate-50/60 dark:bg-white/5">
                         <th className="px-4 py-2 font-semibold">Duct Profile</th>
                         <th className="px-4 py-2 font-semibold text-center">Qty</th>
                         <th className="px-4 py-2 font-semibold text-right">Total Length</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-[#f1f5f9] dark:divide-white/5 font-mono text-[11px]">
+                    <tbody className="divide-y divide-[#f1f5f9] dark:divide-white/5 font-sans text-[11px]">
                       {report.wireDucts.length === 0 ? (
                         <tr>
                           <td colSpan={3} className="px-4 py-4 text-center text-[#64748b] dark:text-slate-400 font-sans">
@@ -564,13 +572,13 @@ export function BomReportModal({ onClose }: BomReportModalProps) {
               {report.cadAssets.length > 0 && (
                 <div className="overflow-hidden rounded-xl border border-[#e2e8f0] dark:border-white/10 bg-white dark:bg-[#141822] shadow-xs">
                   <div className="border-b border-[#e2e8f0] dark:border-white/10 bg-[#f8fafc] dark:bg-[#171b26] px-4 py-2.5">
-                    <span className="font-mono text-xs font-bold uppercase tracking-wider text-[#334155] dark:text-slate-300">
+                    <span className="font-sans text-xs font-bold uppercase tracking-wider text-[#334155] dark:text-slate-300">
                       Custom CAD Assets ({report.cadAssets.length})
                     </span>
                   </div>
                   <table className="w-full text-left text-xs border-collapse">
                     <thead>
-                      <tr className="border-b border-[#e2e8f0] dark:border-white/10 text-[11px] font-mono uppercase text-[#64748b] dark:text-slate-400 bg-slate-50/60 dark:bg-white/5">
+                      <tr className="border-b border-[#e2e8f0] dark:border-white/10 text-[11px] font-sans uppercase text-[#64748b] dark:text-slate-400 bg-slate-50/60 dark:bg-white/5">
                         <th className="px-4 py-2 font-semibold">Name</th>
                         <th className="px-4 py-2 font-semibold">File</th>
                         <th className="px-4 py-2 font-semibold">Format</th>
@@ -578,7 +586,7 @@ export function BomReportModal({ onClose }: BomReportModalProps) {
                         <th className="px-4 py-2 font-semibold text-center">Qty</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-[#f1f5f9] dark:divide-white/5 font-mono text-[11px]">
+                    <tbody className="divide-y divide-[#f1f5f9] dark:divide-white/5 font-sans text-[11px]">
                       {report.cadAssets.map((a) => (
                         <tr key={a.key} className="hover:bg-slate-50 dark:hover:bg-white/5">
                           <td className="px-4 py-2.5 font-bold text-[#0f172a] dark:text-white">
@@ -608,7 +616,7 @@ export function BomReportModal({ onClose }: BomReportModalProps) {
             <div className="overflow-hidden rounded-xl border border-[#e2e8f0] dark:border-white/10 bg-white dark:bg-[#141822] shadow-xs">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
-                  <tr className="border-b border-[#e2e8f0] dark:border-white/10 text-[11px] font-mono uppercase text-[#64748b] dark:text-slate-400 bg-slate-50/60 dark:bg-white/5">
+                  <tr className="border-b border-[#e2e8f0] dark:border-white/10 text-[11px] font-sans uppercase text-[#64748b] dark:text-slate-400 bg-slate-50/60 dark:bg-white/5">
                     <th className="px-4 py-2.5 font-semibold">Wire ID</th>
                     <th className="px-4 py-2.5 font-semibold">From (Device : Pin)</th>
                     <th className="px-4 py-2.5 font-semibold">To (Device : Pin)</th>
@@ -619,7 +627,7 @@ export function BomReportModal({ onClose }: BomReportModalProps) {
                     <th className="px-4 py-2.5 font-semibold text-right">Cut Length (+40mm)</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-[#f1f5f9] dark:divide-white/5 font-mono text-[11px]">
+                <tbody className="divide-y divide-[#f1f5f9] dark:divide-white/5 font-sans text-[11px]">
                   {report.wires.length === 0 ? (
                     <tr>
                       <td colSpan={8} className="px-4 py-8 text-center text-[#64748b] dark:text-slate-400 font-sans">
@@ -663,7 +671,6 @@ export function BomReportModal({ onClose }: BomReportModalProps) {
             </div>
           )}
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

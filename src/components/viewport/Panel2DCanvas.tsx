@@ -2,17 +2,19 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Cable,
   Check,
   Circle,
+  Grid,
   Hand,
   Hash,
   Layers,
   Maximize2,
   MousePointer2,
   Redo2,
+  Route,
   Ruler,
   Square,
+  Tag,
   Trash2,
   Undo2,
   Users,
@@ -21,6 +23,14 @@ import {
   ZoomOut,
 } from "lucide-react";
 import { ContextMenu } from "@/components/ui/ContextMenu";
+import { SelectionFloatingBar } from "@/components/ui/SelectionFloatingBar";
+import { ComponentSvg2D } from "@/components/viewport/ComponentSvg2D";
+import {
+  PANELFLOW_PART_DRAG_MIME,
+  buildCadAssetFromLibraryItem,
+  consumeDraggedCadLibraryItem,
+  type PartDragPayload,
+} from "@/lib/part-drag";
 import { detectCollisionsAndBounds, getEffectiveCadBounds } from "@/lib/collision";
 import { MATERIAL_PRESETS } from "@/types/panel";
 import {
@@ -32,7 +42,9 @@ import {
 import {
   buildSvgObstacleBoxes,
   formatCadDisplayLabel,
+  getComponentTagPlacement,
   getSmartCadLabelPosition,
+  getSmartPinLabelLayout,
   type SvgRect,
 } from "@/lib/cad-label";
 import { getBackplateDimensions } from "@/lib/template-export";
@@ -49,12 +61,14 @@ import {
   worldToPlateX,
   worldToPlateY,
 } from "@/lib/ruler";
-import { getRotatedDimensions, rotateLocalPoint, snapToGrid } from "@/lib/snap";
+import { DIN_RAIL_HEIGHT_MM, getRotatedDimensions, rotateLocalPoint, snapToGrid } from "@/lib/snap";
 import { formatDim } from "@/lib/units";
 import {
+  buildComponentObstacles,
   getWireOuterDiameterMm,
   pointsToRoundedSvgPath,
   pointsToSvgPath,
+  resolvePinExitInfo,
   routeOrthogonalWire,
   routeWireThroughDucts,
 } from "@/lib/wire-router";
@@ -68,6 +82,8 @@ import type {
   WireColorCode,
   WireDuct,
 } from "@/types/panel";
+
+const WIRE_GAUGES = ["0.75", "1.0", "1.5", "2.5", "4.0", "6.0", "10.0", "16.0"] as const;
 
 const WIRE_COLORS: { code: WireColorCode; label: string; hex: string }[] = [
   { code: "R", label: "R (L1)", hex: "#dc2626" },
@@ -148,12 +164,30 @@ type DragState =
       startWorldYMm: number;
       currentWorldXMm: number;
       currentWorldYMm: number;
+    }
+  | {
+      type: "wire-waypoint";
+      wireId: string;
+      index: number;
+      waypoints: Array<{ xMm: number; yMm: number }>;
+    }
+  | {
+      type: "wire-segment";
+      wireId: string;
+      segIndex: number;
+      orientation: "horizontal" | "vertical";
+      waypoints: Array<{ xMm: number; yMm: number }>;
     };
 
 function Component2DSymbol({
   comp,
   isSelected,
   isWireMode,
+  canQuickWire,
+  isDark,
+  zoom,
+  showAllPinLabels,
+  obstacleBoxes,
   activeWireStartPin,
   onPointerDown,
   onContextMenu,
@@ -166,6 +200,11 @@ function Component2DSymbol({
   comp: PlacedComponent;
   isSelected: boolean;
   isWireMode: boolean;
+  canQuickWire: boolean;
+  isDark: boolean;
+  zoom: number;
+  showAllPinLabels: boolean;
+  obstacleBoxes: SvgRect[];
   activeWireStartPin: { componentId: string; pinId: string } | null;
   onPointerDown: (e: React.PointerEvent) => void;
   onContextMenu: (e: React.MouseEvent) => void;
@@ -175,36 +214,36 @@ function Component2DSymbol({
   hasCollision?: boolean;
   isOutOfBounds?: boolean;
 }) {
+  const [isHovered, setIsHovered] = useState(false);
+
   // SVG Y is down, world Y is up
   const x = comp.xMm - comp.widthMm / 2;
   const y = -(comp.yMm + comp.heightMm / 2);
 
-  const isPE = comp.name.toLowerCase().includes("pe");
-  const isN = comp.name.toLowerCase().includes("neutral") || comp.name.toLowerCase().endsWith(" n");
-
-  const bodyFill =
-    comp.templateId === "terminal-block"
-      ? isPE
-        ? "#dcfce7"
-        : isN
-        ? "#dbeafe"
-        : "#f1f5f9"
-      : "#ffffff";
-
-  const accent =
-    comp.templateId === "terminal-block"
-      ? isPE
-        ? "#16a34a"
-        : isN
-        ? "#2563eb"
-        : "#64748b"
-      : comp.accentColor;
-
+  const bodyFill = comp.color || "#f8fafc";
+  const accent = comp.accentColor || "#334155";
   const rot = comp.rotationDeg ?? 0;
+
+  const tagPlacement = useMemo(
+    () =>
+      getComponentTagPlacement({
+        comp,
+        x,
+        y,
+        otherBoxes: obstacleBoxes,
+      }),
+    [comp, x, y, obstacleBoxes]
+  );
+
+  const isWiringActive = isWireMode || Boolean(activeWireStartPin);
+  const shouldShowPins =
+    showAllPinLabels || isWiringActive || isSelected || isHovered || zoom >= 1.6;
 
   return (
     <g
       onPointerDown={onPointerDown}
+      onPointerEnter={() => setIsHovered(true)}
+      onPointerLeave={() => setIsHovered(false)}
       onContextMenu={onContextMenu}
       transform={rot ? `rotate(${rot} ${comp.xMm} ${-comp.yMm})` : undefined}
       className={isWireMode ? "cursor-crosshair" : "cursor-grab active:cursor-grabbing"}
@@ -249,14 +288,15 @@ function Component2DSymbol({
       {/* Selection halo */}
       {isSelected && (
         <rect
-          x={x - 2}
-          y={y - 2}
-          width={comp.widthMm + 4}
-          height={comp.heightMm + 4}
+          x={x - 1.2}
+          y={y - 1.2}
+          width={comp.widthMm + 2.4}
+          height={comp.heightMm + 2.4}
           fill="none"
           stroke={comp.locked ? "#f59e0b" : "#0284c7"}
-          strokeWidth={1.2}
-          strokeDasharray="3,2"
+          strokeWidth={0.55}
+          strokeOpacity={0.85}
+          strokeDasharray="2,1.5"
           rx={1}
         />
       )}
@@ -289,291 +329,87 @@ function Component2DSymbol({
         </g>
       )}
 
-      {/* Main Outline */}
-      <rect
+      {/* Clean Monochrome CAD 2D Component Hardware Artwork */}
+      <ComponentSvg2D
+        comp={comp}
         x={x}
         y={y}
-        width={comp.widthMm}
-        height={comp.heightMm}
-        fill={bodyFill}
-        stroke={isSelected ? "#0284c7" : "#0f172a"}
-        strokeWidth={0.9}
+        bodyFill={bodyFill}
+        accent={accent}
+        isSelected={isSelected}
       />
 
-      {/* Accent Header */}
-      <rect x={x} y={y} width={comp.widthMm} height={5} fill={accent} />
+      {/* Clean Readable IEC Component Tag Pill */}
+      <g
+        className="pointer-events-none select-none"
+        transform={
+          rot === 180
+            ? `rotate(180 ${tagPlacement.x} ${tagPlacement.y})`
+            : undefined
+        }
+      >
+        <rect
+          x={tagPlacement.x - tagPlacement.pillWidth / 2}
+          y={tagPlacement.y - tagPlacement.pillHeight / 2}
+          width={tagPlacement.pillWidth}
+          height={tagPlacement.pillHeight}
+          rx={1.5}
+          fill={
+            isSelected
+              ? "#0284c7"
+              : isDark
+              ? "#0f172a"
+              : "#ffffff"
+          }
+          fillOpacity={isSelected ? 0.96 : 0.92}
+          stroke={
+            isSelected
+              ? "#0369a1"
+              : isDark
+              ? "#475569"
+              : "#cbd5e1"
+          }
+          strokeWidth={0.55}
+        />
+        <text
+          x={tagPlacement.x}
+          y={tagPlacement.y + 0.15}
+          textAnchor="middle"
+          dominantBaseline="central"
+          fontSize={tagPlacement.fontSize}
+          fontFamily="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
+          fontWeight={700}
+          fill={isSelected ? "#ffffff" : isDark ? "#f8fafc" : "#0f172a"}
+        >
+          {tagPlacement.text}
+        </text>
+      </g>
 
-      {/* Eplan 2D Vector Symbol Detail */}
-      {comp.templateId === "mcb-1p" ||
-      comp.templateId === "mcb-2p" ||
-      comp.templateId === "mcb-3p" ||
-      comp.templateId === "mcb-4p" ||
-      comp.templateId === "spd-3pn" ||
-      comp.templateId === "fuse-1p" ? (
-        <g stroke="#334155" strokeWidth={0.7} fill="none">
-          <rect
-            x={x + comp.widthMm * 0.16}
-            y={y + comp.heightMm * 0.38}
-            width={comp.widthMm * 0.68}
-            height={comp.heightMm * 0.24}
-            fill="#e2e8f0"
-          />
-          <line
-            x1={x + comp.widthMm * 0.22}
-            y1={y + comp.heightMm * 0.5}
-            x2={x + comp.widthMm * 0.78}
-            y2={y + comp.heightMm * 0.5}
-            stroke={accent}
-            strokeWidth={1.3}
-          />
-        </g>
-      ) : comp.templateId === "mccb-100a" ? (
-        <g stroke="#334155" strokeWidth={0.8} fill="none">
-          <rect
-            x={x + comp.widthMm * 0.28}
-            y={y + comp.heightMm * 0.35}
-            width={comp.widthMm * 0.44}
-            height={comp.heightMm * 0.28}
-            rx={2}
-            fill="#e2e8f0"
-          />
-          <rect
-            x={x + comp.widthMm * 0.35}
-            y={y + comp.heightMm * 0.44}
-            width={comp.widthMm * 0.3}
-            height={comp.heightMm * 0.1}
-            fill={accent}
-          />
-        </g>
-      ) : comp.templateId === "contactor" || comp.templateId === "tor" ? (
-        <g stroke="#334155" strokeWidth={0.7} fill="none">
-          <rect
-            x={x + 6}
-            y={y + 22}
-            width={comp.widthMm - 12}
-            height={comp.heightMm - 44}
-            fill="#f8fafc"
-          />
-          <line
-            x1={x + 10}
-            y1={y + 28}
-            x2={x + comp.widthMm - 10}
-            y2={y + comp.heightMm - 28}
-            stroke={accent}
-            strokeWidth={1.0}
-          />
-        </g>
-      ) : comp.templateId === "relay" || comp.templateId === "timer-relay" ? (
-        <g stroke="#334155" strokeWidth={0.7} fill="none">
-          <rect
-            x={x + 3}
-            y={y + 22}
-            width={comp.widthMm - 6}
-            height={comp.heightMm - 44}
-            fill="#f8fafc"
-          />
-          <circle
-            cx={x + comp.widthMm / 2}
-            cy={y + comp.heightMm / 2}
-            r={Math.min(5, comp.widthMm * 0.25)}
-            fill={accent}
-            fillOpacity={0.35}
-            stroke={accent}
-          />
-        </g>
-      ) : comp.templateId === "plc-compact" ? (
-        <g stroke="#334155" strokeWidth={0.7} fill="none">
-          <rect x={x + 6} y={y + 22} width={comp.widthMm - 12} height={comp.heightMm - 44} fill="#f1f5f9" />
-          <rect x={x + 10} y={y + 26} width={comp.widthMm - 20} height={10} fill="#0f172a" />
-          <circle cx={x + 15} cy={y + 31} r={1.8} fill="#22c55e" />
-          <circle cx={x + 21} cy={y + 31} r={1.8} fill="#06b6d4" />
-        </g>
-      ) : comp.templateId === "vfd-15kw" ? (
-        <g stroke="#334155" strokeWidth={0.7} fill="none">
-          <rect x={x + 8} y={y + 26} width={comp.widthMm - 16} height={32} fill="#0f172a" />
-          <circle cx={x + comp.widthMm / 2} cy={y + 82} r={12} fill="#e2e8f0" stroke={accent} strokeWidth={1} />
-          <rect x={x + 10} y={y + 110} width={comp.widthMm - 20} height={44} fill="#f1f5f9" />
-        </g>
-      ) : comp.templateId === "psu-24v" ||
-        comp.templateId === "psu-24v-10a" ||
-        comp.templateId === "dist-block-4p" ? (
-        <g stroke="#334155" strokeWidth={0.7} fill="none">
-          <rect
-            x={x + 8}
-            y={y + 26}
-            width={comp.widthMm - 16}
-            height={comp.heightMm - 52}
-            fill="#f1f5f9"
-          />
-          <line
-            x1={x + 12}
-            y1={y + comp.heightMm / 2}
-            x2={x + comp.widthMm - 12}
-            y2={y + comp.heightMm / 2}
-            stroke={accent}
-            strokeWidth={1.1}
-          />
-        </g>
-      ) : comp.templateId === "pilot-lamp-red" ||
-        comp.templateId === "pilot-lamp-green" ||
-        comp.templateId === "pilot-lamp-yellow" ||
-        comp.templateId === "push-button" ||
-        comp.templateId === "e-stop" ||
-        comp.templateId === "selector-3pos" ? (
-        <g stroke="#0f172a" strokeWidth={0.8} fill="none">
-          <circle
-            cx={x + comp.widthMm / 2}
-            cy={y + comp.heightMm / 2}
-            r={Math.min(comp.widthMm, comp.heightMm) * 0.36}
-            fill={accent}
-            fillOpacity={0.3}
-            stroke={accent}
-            strokeWidth={1.2}
-          />
-          <circle
-            cx={x + comp.widthMm / 2}
-            cy={y + comp.heightMm / 2}
-            r={11}
-            strokeDasharray="2,1.5"
-            stroke="#475569"
-          />
-        </g>
-      ) : comp.templateId === "cam-lock" ? (
-        <g stroke="#0f172a" strokeWidth={0.8} fill="none">
-          <circle
-            cx={x + comp.widthMm / 2}
-            cy={y + comp.heightMm / 2}
-            r={11}
-            fill="#334155"
-            fillOpacity={0.2}
-            stroke="#475569"
-            strokeWidth={1.2}
-          />
-          <line
-            x1={x + comp.widthMm / 2 - 10}
-            y1={y + comp.heightMm / 2 - 9}
-            x2={x + comp.widthMm / 2 - 10}
-            y2={y + comp.heightMm / 2 + 9}
-            stroke="#f59e0b"
-            strokeWidth={1.2}
-          />
-          <line
-            x1={x + comp.widthMm / 2 + 10}
-            y1={y + comp.heightMm / 2 - 9}
-            x2={x + comp.widthMm / 2 + 10}
-            y2={y + comp.heightMm / 2 + 9}
-            stroke="#f59e0b"
-            strokeWidth={1.2}
-          />
-          <rect
-            x={x + comp.widthMm / 2 - 2}
-            y={y + comp.heightMm / 2 - 6}
-            width={4}
-            height={12}
-            rx={1}
-            fill="#94a3b8"
-          />
-        </g>
-      ) : comp.templateId === "panel-meter-96" ? (
-        <g stroke="#0f172a" strokeWidth={0.8} fill="none">
-          <rect x={x + 10} y={y + 22} width={comp.widthMm - 20} height={36} fill="#0f172a" />
-          <rect x={x + 14} y={y + 26} width={comp.widthMm - 28} height={28} stroke="#38bdf8" strokeWidth={0.8} />
-        </g>
-      ) : comp.templateId === "cooling-fan-120" ? (
-        <g stroke="#334155" strokeWidth={0.8} fill="none">
-          <circle cx={x + comp.widthMm / 2} cy={y + comp.heightMm / 2} r={comp.widthMm * 0.38} fill="#f1f5f9" />
-          <circle cx={x + comp.widthMm / 2} cy={y + comp.heightMm / 2} r={10} fill="#94a3b8" />
-          <line x1={x + 14} y1={y + comp.heightMm / 2} x2={x + comp.widthMm - 14} y2={y + comp.heightMm / 2} stroke="#475569" />
-          <line x1={x + comp.widthMm / 2} y1={y + 14} x2={x + comp.widthMm / 2} y2={y + comp.heightMm - 14} stroke="#475569" />
-        </g>
-      ) : null}
-
-      {/* Component Tag & Type */}
-      {comp.widthMm < 30 ? (
-        <>
-          {/* Contrasting Pill Tag above narrow component (< 30mm) */}
-          {(() => {
-            const shortTag =
-              comp.name.length > 14 ? `${comp.name.slice(0, 12)}…` : comp.name;
-            const pillW = Math.max(22, shortTag.length * 2.5 + 5);
-            const pillY = hasCollision || isOutOfBounds ? y - 16 : y - 10;
-            return (
-              <g className="pointer-events-none">
-                <rect
-                  x={x + comp.widthMm / 2 - pillW / 2}
-                  y={pillY}
-                  width={pillW}
-                  height={7.5}
-                  rx={1.5}
-                  fill="#0f172a"
-                  stroke="#ffffff"
-                  strokeWidth={0.4}
-                />
-                <text
-                  x={x + comp.widthMm / 2}
-                  y={pillY + 5.2}
-                  fontSize={3.8}
-                  fontFamily="monospace"
-                  fontWeight="bold"
-                  fill="#ffffff"
-                  textAnchor="middle"
-                >
-                  {shortTag}
-                </text>
-              </g>
-            );
-          })()}
-          <text
-            x={x + comp.widthMm / 2}
-            y={y + 11.5}
-            fontSize={3.2}
-            fontFamily="monospace"
-            fontWeight="bold"
-            fill="#334155"
-            textAnchor="middle"
-          >
-            {comp.templateId.toUpperCase()}
-          </text>
-        </>
-      ) : (
-        <>
-          <text
-            x={x + 2.5}
-            y={y + 12}
-            fontSize={4.8}
-            fontFamily="monospace"
-            fontWeight="bold"
-            fill="#0f172a"
-          >
-            {comp.name.length > Math.floor((comp.widthMm - 4) / 2.9)
-              ? `${comp.name.slice(0, Math.max(4, Math.floor((comp.widthMm - 4) / 2.9) - 1))}…`
-              : comp.name}
-          </text>
-          <text
-            x={x + 2.5}
-            y={y + 18}
-            fontSize={3.8}
-            fontFamily="sans-serif"
-            fill="#64748b"
-          >
-            {comp.templateId.toUpperCase()}
-          </text>
-        </>
-      )}
-
-      {/* Pins */}
-      {comp.pins.map((pin) => {
+      {/* Pins with Smart Auto-LOD Anti-Overlap Labels */}
+      {comp.pins.map((pin, pinIdx) => {
         const px = comp.xMm + pin.localXMm;
         const py = -(comp.yMm + pin.localYMm);
         const isStartPin =
           activeWireStartPin?.componentId === comp.id &&
           activeWireStartPin?.pinId === pin.id;
+        const pinLayout = getSmartPinLabelLayout(comp, pin, pinIdx);
 
         return (
           <g
             key={pin.id}
             onPointerDown={(e) => {
-              if (isWireMode) {
+              if (e.button === 0 && (isWireMode || canQuickWire)) {
+                e.stopPropagation();
+                onPinClick(e, pin.id);
+              }
+            }}
+            onPointerUp={(e) => {
+              if (
+                e.button === 0 &&
+                activeWireStartPin &&
+                (activeWireStartPin.componentId !== comp.id ||
+                  activeWireStartPin.pinId !== pin.id)
+              ) {
                 e.stopPropagation();
                 onPinClick(e, pin.id);
               }
@@ -584,32 +420,63 @@ function Component2DSymbol({
               onPinDoubleClick?.(e, pin, { xMm: px, yMm: comp.yMm + pin.localYMm });
             }}
             onContextMenu={(e) => {
-              if (isWireMode) {
+              if (isWiringActive || canQuickWire) {
                 e.stopPropagation();
                 e.preventDefault();
                 onPinContextMenu?.(e, pin, { xMm: px, yMm: comp.yMm + pin.localYMm });
               }
             }}
-            className={isWireMode ? "cursor-pointer" : "cursor-pointer"}
+            className="cursor-crosshair"
           >
+            {/* Expanded transparent hit target so clicking a pin is effortless and never drags the component */}
             <circle
               cx={px}
               cy={py}
-              r={isWireMode ? 2.6 : 1.7}
-              fill={isStartPin ? "#f59e0b" : "#ffffff"}
-              stroke={isStartPin ? "#b45309" : isWireMode ? "#0284c7" : "#1e293b"}
-              strokeWidth={isWireMode ? 0.9 : 0.6}
+              r={isWiringActive ? 5.0 : 3.6}
+              fill="transparent"
+              pointerEvents="all"
             />
-            <text
-              x={px}
-              y={py - 3}
-              fontSize={3.6}
-              fontFamily="monospace"
-              fill="#334155"
-              textAnchor="middle"
-            >
-              {pin.label}
-            </text>
+            {isWiringActive && !isStartPin && (
+              <circle
+                cx={px}
+                cy={py}
+                r={3.2}
+                fill="#0284c7"
+                fillOpacity={0.14}
+                stroke="#0284c7"
+                strokeOpacity={0.55}
+                strokeWidth={0.45}
+                pointerEvents="none"
+              />
+            )}
+            <circle
+              cx={px}
+              cy={py}
+              r={isWiringActive ? 2.2 : isSelected || isHovered ? 1.8 : 1.4}
+              fill={isStartPin ? "#0284c7" : "#ffffff"}
+              stroke={isStartPin ? "#0369a1" : isWiringActive ? "#0284c7" : "#334155"}
+              strokeWidth={isWiringActive ? 0.75 : 0.55}
+              pointerEvents="none"
+            />
+            {shouldShowPins && (
+              <text
+                x={pinLayout.x}
+                y={pinLayout.y}
+                fontSize={pinLayout.fontSize}
+                fontFamily="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', monospace"
+                fontWeight={700}
+                fill={isWiringActive ? "#0369a1" : isDark ? "#f1f5f9" : "#0f172a"}
+                stroke={isDark ? "#0b0f19" : "#ffffff"}
+                strokeWidth={1.1}
+                strokeLinejoin="round"
+                style={{ paintOrder: "stroke fill" }}
+                textAnchor={pinLayout.textAnchor}
+                dominantBaseline={pinLayout.dominantBaseline}
+                pointerEvents="none"
+              >
+                {pin.label}
+              </text>
+            )}
           </g>
         );
       })}
@@ -622,6 +489,7 @@ function CadAsset2DSymbol({
   isSelected,
   isMarkingThis,
   isWireMode,
+  canQuickWire,
   isDark,
   obstacleBoxes,
   activeWireStartPin,
@@ -635,6 +503,7 @@ function CadAsset2DSymbol({
   isSelected: boolean;
   isMarkingThis: boolean;
   isWireMode: boolean;
+  canQuickWire: boolean;
   isDark: boolean;
   obstacleBoxes: SvgRect[];
   activeWireStartPin: { componentId: string; pinId: string } | null;
@@ -781,14 +650,15 @@ function CadAsset2DSymbol({
       {/* Selection / Marking Halo */}
       {(isSelected || isMarkingThis) && (
         <rect
-          x={effX - 2.5}
-          y={effY - 2.5}
-          width={effW + 5}
-          height={effH + 5}
+          x={effX - 1.2}
+          y={effY - 1.2}
+          width={effW + 2.4}
+          height={effH + 2.4}
           fill="none"
           stroke={isMarkingThis ? "#f59e0b" : asset.locked ? "#f59e0b" : "#0284c7"}
-          strokeWidth={1.2}
-          strokeDasharray="3,2"
+          strokeWidth={0.55}
+          strokeOpacity={0.85}
+          strokeDasharray="2,1.5"
           rx={1}
         />
       )}
@@ -919,7 +789,19 @@ function CadAsset2DSymbol({
                 setHoveredPinId((curr) => (curr === pin.id ? null : curr))
               }
               onPointerDown={(e) => {
-                if (isWireMode) {
+                if (e.button === 0 && !isMarkingThis && (isWireMode || canQuickWire)) {
+                  e.stopPropagation();
+                  onPinClick(e, pin.id);
+                }
+              }}
+              onPointerUp={(e) => {
+                if (
+                  e.button === 0 &&
+                  !isMarkingThis &&
+                  activeWireStartPin &&
+                  (activeWireStartPin.componentId !== asset.id ||
+                    activeWireStartPin.pinId !== pin.id)
+                ) {
                   e.stopPropagation();
                   onPinClick(e, pin.id);
                 }
@@ -1026,6 +908,8 @@ export function Panel2DCanvas() {
   const activeWireGauge = usePanelStore((s) => s.activeWireGauge);
   const activeWireStartPin = usePanelStore((s) => s.activeWireStartPin);
   const autoRouteDuctsEnabled = usePanelStore((s) => s.autoRouteDuctsEnabled);
+  const showPinLabels = usePanelStore((s) => s.showPinLabels);
+  const toggleShowPinLabels = usePanelStore((s) => s.toggleShowPinLabels);
   const autoNumberWires = usePanelStore((s) => s.autoNumberWires);
   const setAutoRouteDuctsEnabled = usePanelStore((s) => s.setAutoRouteDuctsEnabled);
   const isPinMarkingMode = usePanelStore((s) => s.isPinMarkingMode);
@@ -1057,6 +941,11 @@ export function Panel2DCanvas() {
   const updateRail = usePanelStore((s) => s.updateRail);
   const updateDuct = usePanelStore((s) => s.updateDuct);
   const addWire = usePanelStore((s) => s.addWire);
+  const updateWire = usePanelStore((s) => s.updateWire);
+  const removeWire = usePanelStore((s) => s.removeWire);
+  const autoRouteAllWires = usePanelStore((s) => s.autoRouteAllWires);
+  const addComponent = usePanelStore((s) => s.addComponent);
+  const addCadAsset = usePanelStore((s) => s.addCadAsset);
   const addCustomDrawnComponent = usePanelStore((s) => s.addCustomDrawnComponent);
   const drawShapeMode = usePanelStore((s) => s.drawShapeMode);
   const setDrawShapeMode = usePanelStore((s) => s.setDrawShapeMode);
@@ -1091,6 +980,27 @@ export function Panel2DCanvas() {
   );
   const [viewportSize, setViewportSize] = useState({ width: 960, height: 760 });
   const [hoveredGroupId, setHoveredGroupId] = useState<string | null>(null);
+  const [isLibraryDragOver, setIsLibraryDragOver] = useState(false);
+  const [gridPopoverOpen, setGridPopoverOpen] = useState(false);
+  const gridPopoverRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!gridPopoverOpen) return;
+    const handleOutside = (e: MouseEvent) => {
+      if (gridPopoverRef.current && !gridPopoverRef.current.contains(e.target as Node)) {
+        setGridPopoverOpen(false);
+      }
+    };
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setGridPopoverOpen(false);
+    };
+    document.addEventListener("mousedown", handleOutside);
+    window.addEventListener("keydown", handleEsc);
+    return () => {
+      document.removeEventListener("mousedown", handleOutside);
+      window.removeEventListener("keydown", handleEsc);
+    };
+  }, [gridPopoverOpen]);
   const [inlinePinEdit, setInlinePinEdit] = useState<{
     targetKind: "component" | "cad";
     targetId: string;
@@ -1115,10 +1025,190 @@ export function Panel2DCanvas() {
     [enclosure, plateConfig]
   );
 
+  const selectionTopCenter = useMemo(() => {
+    const targets =
+      selectedIds.length > 0
+        ? selectedIds
+        : selected
+          ? [selected]
+          : [];
+    if (targets.length === 0) return null;
+
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+
+    for (const t of targets) {
+      if (t.kind === "wire") {
+        const w = wires.find((item) => item.id === t.id);
+        if (!w) continue;
+        if (w.waypoints && w.waypoints.length >= 2) {
+          let bestMid = w.waypoints[0];
+          let bestLen = -1;
+          for (let i = 0; i < w.waypoints.length - 1; i++) {
+            const a = w.waypoints[i];
+            const b = w.waypoints[i + 1];
+            const len = Math.hypot(b.xMm - a.xMm, b.yMm - a.yMm);
+            if (len > bestLen) {
+              bestLen = len;
+              bestMid = { xMm: (a.xMm + b.xMm) / 2, yMm: (a.yMm + b.yMm) / 2 };
+            }
+          }
+          minX = Math.min(minX, bestMid.xMm);
+          maxX = Math.max(maxX, bestMid.xMm);
+          minY = Math.min(minY, bestMid.yMm - 6);
+          maxY = Math.max(maxY, bestMid.yMm + 6);
+        } else {
+          const fromComp =
+            components.find((c) => c.id === w.fromComponentId) ??
+            cadAssets.find((a) => a.id === w.fromComponentId);
+          const toComp =
+            components.find((c) => c.id === w.toComponentId) ??
+            cadAssets.find((a) => a.id === w.toComponentId);
+          if (fromComp && toComp) {
+            const midX = (fromComp.xMm + toComp.xMm) / 2;
+            const midY = (fromComp.yMm + toComp.yMm) / 2;
+            minX = Math.min(minX, midX);
+            maxX = Math.max(maxX, midX);
+            minY = Math.min(minY, midY - 6);
+            maxY = Math.max(maxY, midY + 6);
+          }
+        }
+      } else if (t.kind === "component") {
+        const c = components.find((item) => item.id === t.id);
+        if (!c) continue;
+        const dims = getRotatedDimensions(c.widthMm, c.heightMm, c.rotationDeg ?? 0);
+        minX = Math.min(minX, c.xMm - dims.widthMm / 2);
+        maxX = Math.max(maxX, c.xMm + dims.widthMm / 2);
+        minY = Math.min(minY, c.yMm - dims.heightMm / 2);
+        maxY = Math.max(maxY, c.yMm + dims.heightMm / 2);
+      } else if (t.kind === "cad") {
+        const a = cadAssets.find((item) => item.id === t.id);
+        if (!a) continue;
+        const eff = getEffectiveCadBounds(a);
+        const rot = a.rotationDeg ?? 0;
+        const dims = getRotatedDimensions(eff.widthMm, eff.heightMm, rot);
+        const rotOffset = rotateLocalPoint(eff.offsetX, eff.offsetY, rot);
+        const cx = a.xMm + rotOffset.xMm;
+        const cy = a.yMm + rotOffset.yMm;
+        minX = Math.min(minX, cx - dims.widthMm / 2);
+        maxX = Math.max(maxX, cx + dims.widthMm / 2);
+        minY = Math.min(minY, cy - dims.heightMm / 2);
+        maxY = Math.max(maxY, cy + dims.heightMm / 2);
+      } else if (t.kind === "rail") {
+        const r = rails.find((item) => item.id === t.id);
+        if (!r) continue;
+        minX = Math.min(minX, r.xMm - r.lengthMm / 2);
+        maxX = Math.max(maxX, r.xMm + r.lengthMm / 2);
+        minY = Math.min(minY, r.yMm - DIN_RAIL_HEIGHT_MM / 2);
+        maxY = Math.max(maxY, r.yMm + DIN_RAIL_HEIGHT_MM / 2);
+      } else if (t.kind === "duct") {
+        const d = ducts.find((item) => item.id === t.id);
+        if (!d) continue;
+        minX = Math.min(minX, d.xMm - d.widthMm / 2);
+        maxX = Math.max(maxX, d.xMm + d.widthMm / 2);
+        minY = Math.min(minY, d.yMm - d.heightMm / 2);
+        maxY = Math.max(maxY, d.yMm + d.heightMm / 2);
+      }
+    }
+
+    if (!Number.isFinite(minX) || !Number.isFinite(minY) || !Number.isFinite(maxY)) return null;
+    const screenX = pan.x + ((minX + maxX) / 2) * zoom;
+    const screenTopY = pan.y + -maxY * zoom;
+    const screenBottomY = pan.y + -minY * zoom;
+    const isNearTop = screenTopY < 76;
+    const placement: "top" | "bottom" = isNearTop ? "bottom" : "top";
+    const rawY = isNearTop ? screenBottomY + 14 : screenTopY - 28;
+    return {
+      x: Math.max(120, Math.min(viewportSize.width - 120, screenX)),
+      y: Math.max(76, Math.min(viewportSize.height - 70, rawY)),
+      placement,
+    };
+  }, [selected, selectedIds, components, cadAssets, rails, ducts, wires, pan, zoom, viewportSize]);
+
   const collisionReport = useMemo(
     () => detectCollisionsAndBounds(components, cadAssets, plateW, plateH),
     [components, cadAssets, plateW, plateH]
   );
+
+  // Detect overlaps for DIN rails and Wire Ducts against components, rails, and ducts
+  const { collidingRailIds, collidingDuctIds } = useMemo(() => {
+    const railIds = new Set<string>();
+    const ductIds = new Set<string>();
+
+    const overlapAmt = (aCenter: number, aSize: number, bCenter: number, bSize: number) =>
+      (aSize + bSize) / 2 - Math.abs(aCenter - bCenter);
+
+    const plateComps = components
+      .filter((c) => c.mountingType !== "door_cutout")
+      .map((c) => {
+        const dims = getRotatedDimensions(c.widthMm, c.heightMm, c.rotationDeg ?? 0);
+        return { ...c, w: dims.widthMm, h: dims.heightMm };
+      });
+
+    // 1. Check each DIN Rail against ducts, other rails, and unbound components
+    for (let i = 0; i < rails.length; i++) {
+      const r = rails[i];
+      for (const d of ducts) {
+        const ox = overlapAmt(r.xMm, r.lengthMm, d.xMm, d.widthMm);
+        const oy = overlapAmt(r.yMm, DIN_RAIL_HEIGHT_MM, d.yMm, d.heightMm);
+        const xThreshold = d.orientation === "vertical" ? 22 : 2;
+        if (ox > xThreshold && oy > 2) {
+          railIds.add(r.id);
+          ductIds.add(d.id);
+        }
+      }
+      for (let j = i + 1; j < rails.length; j++) {
+        const other = rails[j];
+        if (
+          overlapAmt(r.xMm, r.lengthMm, other.xMm, other.lengthMm) > 2 &&
+          overlapAmt(r.yMm, DIN_RAIL_HEIGHT_MM, other.yMm, DIN_RAIL_HEIGHT_MM) > 2
+        ) {
+          railIds.add(r.id);
+          railIds.add(other.id);
+        }
+      }
+      for (const c of plateComps) {
+        const parentOnThisRail =
+          c.mountedToComponentId &&
+          components.some((p) => p.id === c.mountedToComponentId && p.railId === r.id);
+        if (c.railId === r.id || parentOnThisRail) continue;
+        if (
+          overlapAmt(r.xMm, r.lengthMm, c.xMm, c.w) > 2 &&
+          overlapAmt(r.yMm, DIN_RAIL_HEIGHT_MM, c.yMm, c.h) > 2
+        ) {
+          railIds.add(r.id);
+        }
+      }
+    }
+
+    // 2. Check each Wire Duct against components and same-orientation ducts
+    for (let i = 0; i < ducts.length; i++) {
+      const d = ducts[i];
+      for (const c of plateComps) {
+        if (
+          overlapAmt(d.xMm, d.widthMm, c.xMm, c.w) > 3 &&
+          overlapAmt(d.yMm, d.heightMm, c.yMm, c.h) > 3
+        ) {
+          ductIds.add(d.id);
+        }
+      }
+      for (let j = i + 1; j < ducts.length; j++) {
+        const other = ducts[j];
+        if (d.orientation !== other.orientation) continue;
+        if (
+          overlapAmt(d.xMm, d.widthMm, other.xMm, other.widthMm) > 2 &&
+          overlapAmt(d.yMm, d.heightMm, other.yMm, other.heightMm) > 2
+        ) {
+          ductIds.add(d.id);
+          ductIds.add(other.id);
+        }
+      }
+    }
+
+    return { collidingRailIds: railIds, collidingDuctIds: ductIds };
+  }, [rails, ducts, components]);
 
   const cadObstacleBoxes = useMemo(
     () => buildSvgObstacleBoxes(components, cadAssets),
@@ -1403,6 +1493,16 @@ export function Panel2DCanvas() {
     }
     if (e.button === 0) {
       const raw = screenToWorld(e.clientX, e.clientY);
+      if (activeWireStartPin) {
+        // Magnetic pin snap even if click landed slightly outside component edge
+        const nearest = findNearestPin(raw.xMm, raw.yMm, 10, activeWireStartPin);
+        if (nearest) {
+          e.stopPropagation();
+          handlePinClick(nearest.componentId, nearest.pinId);
+          return;
+        }
+        setActiveWireStartPin(null);
+      }
       setDragState({
         type: "marquee",
         startWorldXMm: raw.xMm,
@@ -1599,10 +1699,14 @@ export function Panel2DCanvas() {
     }
 
     if (dragState.type === "rail-move") {
-      updateRail(dragState.id, {
-        xMm: snapToGrid(world.xMm - dragState.offsetXMm, gridSnapMm),
-        yMm: snapToGrid(world.yMm - dragState.offsetYMm, gridSnapMm),
-      });
+      updateRail(
+        dragState.id,
+        {
+          xMm: snapToGrid(world.xMm - dragState.offsetXMm, gridSnapMm),
+          yMm: snapToGrid(world.yMm - dragState.offsetYMm, gridSnapMm),
+        },
+        { skipHistory: true }
+      );
       return;
     }
 
@@ -1618,18 +1722,26 @@ export function Panel2DCanvas() {
         dragState.edge === "right"
           ? dragState.initialXMm + (nextLen - dragState.initialLengthMm) / 2
           : dragState.initialXMm - (nextLen - dragState.initialLengthMm) / 2;
-      updateRail(dragState.id, {
-        lengthMm: nextLen,
-        xMm: nextX,
-      });
+      updateRail(
+        dragState.id,
+        {
+          lengthMm: nextLen,
+          xMm: nextX,
+        },
+        { skipHistory: true }
+      );
       return;
     }
 
     if (dragState.type === "duct-move") {
-      updateDuct(dragState.id, {
-        xMm: snapToGrid(world.xMm - dragState.offsetXMm, gridSnapMm),
-        yMm: snapToGrid(world.yMm - dragState.offsetYMm, gridSnapMm),
-      });
+      updateDuct(
+        dragState.id,
+        {
+          xMm: snapToGrid(world.xMm - dragState.offsetXMm, gridSnapMm),
+          yMm: snapToGrid(world.yMm - dragState.offsetYMm, gridSnapMm),
+        },
+        { skipHistory: true }
+      );
       return;
     }
 
@@ -1646,7 +1758,7 @@ export function Panel2DCanvas() {
           dragState.edge === "right"
             ? d.xMm + (nextW - d.widthMm) / 2
             : d.xMm - (nextW - d.widthMm) / 2;
-        updateDuct(d.id, { widthMm: nextW, xMm: nextX });
+        updateDuct(d.id, { widthMm: nextW, xMm: nextX }, { skipHistory: true });
       } else {
         const nextH = Math.max(
           20,
@@ -1656,8 +1768,100 @@ export function Panel2DCanvas() {
           dragState.edge === "top"
             ? d.yMm + (nextH - d.heightMm) / 2
             : d.yMm - (nextH - d.heightMm) / 2;
-        updateDuct(d.id, { heightMm: nextH, yMm: nextY });
+        updateDuct(d.id, { heightMm: nextH, yMm: nextY }, { skipHistory: true });
       }
+      return;
+    }
+
+    if (dragState.type === "wire-waypoint") {
+      // Multi-bend orthogonal corner drag: never freezes near pins, propagates 90° to interior neighbors,
+      // and inserts a clean 90° elbow if dragged off a pin's axis.
+      const targetX = e.shiftKey
+        ? Math.round(world.xMm)
+        : snapToGrid(world.xMm, gridSnapMm);
+      const targetY = e.shiftKey
+        ? Math.round(world.yMm)
+        : snapToGrid(world.yMm, gridSnapMm);
+
+      const pts = dragState.waypoints.map((p) => ({ ...p }));
+      const idx = dragState.index;
+      if (idx > 0 && idx < pts.length - 1) {
+        const oldCorner = pts[idx];
+        const prev = pts[idx - 1];
+        const next = pts[idx + 1];
+        const prevIsPin = idx - 1 === 0;
+        const nextIsPin = idx + 1 === pts.length - 1;
+
+        pts[idx] = { xMm: targetX, yMm: targetY };
+
+        if (!prevIsPin) {
+          if (Math.abs(prev.xMm - oldCorner.xMm) < 1) prev.xMm = targetX;
+          else if (Math.abs(prev.yMm - oldCorner.yMm) < 1) prev.yMm = targetY;
+        }
+        if (!nextIsPin) {
+          if (Math.abs(next.xMm - oldCorner.xMm) < 1) next.xMm = targetX;
+          else if (Math.abs(next.yMm - oldCorner.yMm) < 1) next.yMm = targetY;
+        }
+
+        // If dragged away from a fixed pin's axis, keep a clean 90° elbow between pin and dragged corner
+        const resultPts: Array<{ xMm: number; yMm: number }> = [];
+        for (let k = 0; k < pts.length; k++) {
+          resultPts.push(pts[k]);
+          if (k < pts.length - 1) {
+            const a = pts[k];
+            const b = pts[k + 1];
+            if (Math.abs(a.xMm - b.xMm) > 0.5 && Math.abs(a.yMm - b.yMm) > 0.5) {
+              // Keep vertical exit/entry at pins (k===0 or k+1===pts.length-1)
+              if (k === 0) {
+                resultPts.push({ xMm: a.xMm, yMm: b.yMm });
+              } else {
+                resultPts.push({ xMm: b.xMm, yMm: a.yMm });
+              }
+            }
+          }
+        }
+
+        updateWire(
+          dragState.wireId,
+          { waypoints: resultPts },
+          { skipHistory: true }
+        );
+        return;
+      }
+
+      updateWire(
+        dragState.wireId,
+        { waypoints: pts },
+        { skipHistory: true }
+      );
+      return;
+    }
+
+    if (dragState.type === "wire-segment") {
+      // Slide an orthogonal wire segment smoothly perpendicular to its axis
+      const pts = dragState.waypoints.map((p) => ({ ...p }));
+      const i = dragState.segIndex;
+      if (i > 0 && i + 1 < pts.length - 1) {
+        if (dragState.orientation === "horizontal") {
+          const nextY = e.shiftKey
+            ? Math.round(world.yMm)
+            : snapToGrid(world.yMm, gridSnapMm);
+          pts[i].yMm = nextY;
+          pts[i + 1].yMm = nextY;
+        } else {
+          const nextX = e.shiftKey
+            ? Math.round(world.xMm)
+            : snapToGrid(world.xMm, gridSnapMm);
+          pts[i].xMm = nextX;
+          pts[i + 1].xMm = nextX;
+        }
+        updateWire(
+          dragState.wireId,
+          { waypoints: pts },
+          { skipHistory: true }
+        );
+      }
+      return;
     }
   };
 
@@ -1752,6 +1956,61 @@ export function Panel2DCanvas() {
     }
     setAlignmentGuides([]);
     setDragState(null);
+
+    // Support Drag-to-Wire: releasing pointer near a target pin finishes the wire automatically
+    if (e && activeWireStartPin && !dragState) {
+      const w = screenToWorld(e.clientX, e.clientY);
+      const nearest = findNearestPin(w.xMm, w.yMm, 10, activeWireStartPin);
+      if (nearest) {
+        handlePinClick(nearest.componentId, nearest.pinId);
+      }
+    }
+  };
+
+  const findNearestPin = (
+    worldXMm: number,
+    worldYMm: number,
+    maxDistMm = 10,
+    excludePin?: { componentId: string; pinId: string } | null
+  ): { componentId: string; pinId: string; xMm: number; yMm: number } | null => {
+    let best: { componentId: string; pinId: string; xMm: number; yMm: number } | null = null;
+    let bestDist = maxDistMm;
+
+    for (const c of components) {
+      const rot = c.rotationDeg ?? 0;
+      for (const p of c.pins) {
+        if (excludePin && excludePin.componentId === c.id && excludePin.pinId === p.id) {
+          continue;
+        }
+        const rp = rotateLocalPoint(p.localXMm, p.localYMm, rot);
+        const px = c.xMm + rp.xMm;
+        const py = c.yMm + rp.yMm;
+        const d = Math.hypot(px - worldXMm, py - worldYMm);
+        if (d <= bestDist) {
+          bestDist = d;
+          best = { componentId: c.id, pinId: p.id, xMm: px, yMm: py };
+        }
+      }
+    }
+
+    for (const a of cadAssets) {
+      const rot = a.rotationDeg ?? 0;
+      for (const p of a.pins) {
+        if (excludePin && excludePin.componentId === a.id && excludePin.pinId === p.id) {
+          continue;
+        }
+        const rp = rotateLocalPoint(p.localXMm, p.localYMm, rot);
+        const px = a.xMm + rp.xMm;
+        const py = a.yMm + rp.yMm;
+        const d = Math.hypot(px - worldXMm, py - worldYMm);
+        if (d <= bestDist) {
+          bestDist = d;
+          best = { componentId: a.id, pinId: p.id, xMm: px, yMm: py };
+        }
+      }
+    }
+
+    return best;
   };
 
   const handlePinClick = (componentId: string, pinId: string) => {
@@ -1860,7 +2119,46 @@ export function Panel2DCanvas() {
   return (
     <div
       ref={containerRef}
-      className="relative h-full w-full overflow-hidden bg-white dark:bg-[#090b10] select-none touch-none"
+      className={`relative h-full w-full overflow-hidden bg-white dark:bg-[#090b10] select-none touch-none transition-shadow ${
+        isLibraryDragOver ? "ring-2 ring-inset ring-sky-500/50" : ""
+      }`}
+      onDragOver={(e) => {
+        if (!e.dataTransfer.types.includes(PANELFLOW_PART_DRAG_MIME)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "copy";
+        if (!isLibraryDragOver) setIsLibraryDragOver(true);
+        setCursorWorld(screenToWorld(e.clientX, e.clientY));
+      }}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+          setIsLibraryDragOver(false);
+        }
+      }}
+      onDrop={(e) => {
+        const raw = e.dataTransfer.getData(PANELFLOW_PART_DRAG_MIME);
+        setIsLibraryDragOver(false);
+        if (!raw) return;
+        e.preventDefault();
+        try {
+          const payload = JSON.parse(raw) as PartDragPayload;
+          const world = screenToWorld(e.clientX, e.clientY);
+          if (payload.kind === "component" && payload.templateId) {
+            addComponent(payload.templateId, undefined, world);
+          } else if (payload.kind === "cad_library") {
+            const item = consumeDraggedCadLibraryItem();
+            if (item && item.id === payload.libraryId) {
+              addCadAsset(
+                buildCadAssetFromLibraryItem(item, {
+                  xMm: snapToGrid(world.xMm, gridSnapMm),
+                  yMm: snapToGrid(world.yMm, gridSnapMm),
+                })
+              );
+            }
+          }
+        } catch {
+          // Ignore malformed drag payload
+        }
+      }}
       onWheel={handleWheel}
       onPointerDownCapture={handleContainerPointerDownCapture}
       onPointerMove={handlePointerMove}
@@ -1881,7 +2179,7 @@ export function Panel2DCanvas() {
       }}
     >
       {/* Top Engineering Ruler (Plate Top-Left Origin: 0 -> plateW) */}
-      <div className="pointer-events-none absolute top-0 right-0 left-0 z-20 h-6 overflow-hidden border-b border-[#e2e8f0] dark:border-white/10 bg-white/95 dark:bg-[#0c0e14]/90 font-mono text-[9px] text-[#64748b] dark:text-slate-400 backdrop-blur-md">
+      <div className="pointer-events-none absolute top-0 right-0 left-0 z-20 h-6 overflow-hidden border-b border-[#e2e8f0] dark:border-white/10 bg-white/95 dark:bg-[#0c0e14]/90 font-sans text-[9px] text-[#64748b] dark:text-slate-400 backdrop-blur-md">
         {/* Dimmed out-of-plate zones */}
         {plateLeftRulerPx > 0 && (
           <div
@@ -1972,7 +2270,7 @@ export function Panel2DCanvas() {
       </div>
 
       {/* Left Engineering Ruler (Plate Top-Left Origin: 0 -> plateH downward) */}
-      <div className="pointer-events-none absolute top-0 bottom-0 left-0 z-20 w-6 overflow-hidden border-r border-[#e2e8f0] dark:border-white/10 bg-white/95 dark:bg-[#0c0e14]/90 font-mono text-[9px] text-[#64748b] dark:text-slate-400 backdrop-blur-md">
+      <div className="pointer-events-none absolute top-0 bottom-0 left-0 z-20 w-6 overflow-hidden border-r border-[#e2e8f0] dark:border-white/10 bg-white/95 dark:bg-[#0c0e14]/90 font-sans text-[9px] text-[#64748b] dark:text-slate-400 backdrop-blur-md">
         {/* Dimmed out-of-plate zones */}
         {plateTopRulerPx > 0 && (
           <div
@@ -2063,215 +2361,270 @@ export function Panel2DCanvas() {
       </div>
 
       {/* Corner Origin Badge */}
-      <div className="pointer-events-none absolute top-0 left-0 z-30 flex h-6 w-6 items-center justify-center border-r border-b border-[#e2e8f0] dark:border-white/10 bg-[#f8fafc] dark:bg-[#111318] font-mono text-[8px] font-bold text-[#0f172a] dark:text-slate-300">
+      <div className="pointer-events-none absolute top-0 left-0 z-30 flex h-6 w-6 items-center justify-center border-r border-b border-[#e2e8f0] dark:border-white/10 bg-[#f8fafc] dark:bg-[#111318] font-sans text-[8px] font-bold text-[#0f172a] dark:text-slate-300">
         mm
       </div>
 
-      {/* Top Floating Pill Toolbar (Centered ala RelayFlow) */}
-      <div className="absolute top-8 sm:top-9 left-1/2 -translate-x-1/2 z-20 flex max-w-[95vw] sm:max-w-[94%] flex-nowrap sm:flex-wrap items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar rounded-full border border-[#e2e8f0] dark:border-white/10 bg-white/95 dark:bg-[#171a21]/95 px-2 sm:px-3 py-1 sm:py-1.5 shadow-sm dark:shadow-2xl backdrop-blur-xl">
-        <div className="flex shrink-0 items-center rounded-full border border-[#e2e8f0] dark:border-white/10 bg-[#f1f5f9] dark:bg-[#0c0e14] p-0.5">
-          <button
-            type="button"
-            onClick={() => setCanvasTool2D("select")}
-            className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium transition-all ${
-              canvasTool2D === "select"
-                ? "bg-[#0f172a] text-white dark:bg-white dark:text-black font-semibold shadow-xs"
-                : "text-[#64748b] dark:text-slate-400 hover:text-[#0f172a] dark:hover:text-slate-200"
-            }`}
-            title="Select & Move (Click & Drag)"
-          >
-            <MousePointer2 className="h-3.5 w-3.5" />
-            Select
-          </button>
-          <button
-            type="button"
-            onClick={() => setCanvasTool2D("wire")}
-            className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium transition-all ${
-              canvasTool2D === "wire"
-                ? "bg-[#0f172a] text-white dark:bg-white dark:text-black font-semibold shadow-xs"
-                : "text-[#64748b] dark:text-slate-400 hover:text-[#0f172a] dark:hover:text-slate-200"
-            }`}
-            title="Wire Connection Tool (Click Pin A -> Pin B)"
-          >
-            <Cable className="h-3.5 w-3.5" />
-            Wire
-          </button>
-          <button
-            type="button"
-            onClick={() => setCanvasTool2D("measure")}
-            className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium transition-all ${
-              canvasTool2D === "measure"
-                ? "bg-[#0f172a] text-white dark:bg-white dark:text-black font-semibold shadow-xs"
-                : "text-[#64748b] dark:text-slate-400 hover:text-[#0f172a] dark:hover:text-slate-200"
-            }`}
-            title="Measure Dimension Tool (Click Point A -> Point B, Esc to clear)"
-          >
-            <Ruler className="h-3.5 w-3.5" />
-            Measure
-          </button>
-          <button
-            type="button"
-            onClick={() => setCanvasTool2D("draw")}
-            className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium transition-all ${
-              canvasTool2D === "draw"
-                ? "bg-[#0f172a] text-white dark:bg-white dark:text-black font-semibold shadow-xs"
-                : "text-[#64748b] dark:text-slate-400 hover:text-[#0f172a] dark:hover:text-slate-200"
-            }`}
-            title="Draw Custom Geometry / Busbar Tool (Click & drag on canvas)"
-          >
-            <Square className="h-3.5 w-3.5" />
-            Draw
-          </button>
-          <button
-            type="button"
-            onClick={() => setCanvasTool2D("pan")}
-            className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium transition-all ${
-              canvasTool2D === "pan"
-                ? "bg-[#0f172a] text-white dark:bg-white dark:text-black font-semibold shadow-xs"
-                : "text-[#64748b] dark:text-slate-400 hover:text-[#0f172a] dark:hover:text-slate-200"
-            }`}
-            title="Pan Canvas (or Space + Drag)"
-          >
-            <Hand className="h-3.5 w-3.5" />
-            Pan
-          </button>
-        </div>
-
-        {/* Group / Ungroup in Floating Toolbar (When items selected) */}
-        {(selectedIds.length >= 2 || selected) && (
-          <div className="flex shrink-0 items-center rounded-full border border-purple-500/40 bg-purple-50/50 dark:bg-purple-950/30 p-0.5">
-            <button
-              type="button"
-              disabled={selectedIds.length < 2}
-              onClick={groupSelectedItems}
-              title="Group (Ctrl+G)"
-              className="flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-[10px] text-purple-700 dark:text-purple-300 hover:bg-purple-200/50 dark:hover:bg-purple-800/40 disabled:opacity-40 transition-all font-medium"
-            >
-              <Users className="h-3 w-3 text-purple-600 dark:text-purple-400" />
-              <span>Group (Ctrl+G)</span>
-            </button>
-            <button
-              type="button"
-              onClick={ungroupSelectedItems}
-              title="Ungroup (Ctrl+Shift+G)"
-              className="flex items-center gap-1 rounded-full px-2 py-0.5 font-mono text-[10px] text-purple-700 dark:text-purple-300 hover:bg-purple-200/50 dark:hover:bg-purple-800/40 transition-all font-medium"
-            >
-              <Layers className="h-3 w-3 text-purple-600 dark:text-purple-400" />
-              <span>Ungroup (Ctrl+Shift+G)</span>
-            </button>
+      {/* Top-Left Vertical Floating Island Toolbar + Contextual Sub-Bar */}
+      <div className="absolute top-8 sm:top-9 left-8 sm:left-9 z-30 flex items-start gap-2 select-none">
+        {/* Vertical Floating Toolbar */}
+        <div className="flex flex-col items-center gap-1 rounded-2xl border border-slate-200/90 dark:border-white/15 bg-white/85 dark:bg-[#11141c]/80 px-1.5 py-2 shadow-2xl shadow-slate-900/15 dark:shadow-black/60 backdrop-blur-md">
+          {/* Tools: Select, Measure, Draw, Pan (Icon-only + Right Tooltip) */}
+          <div className="flex flex-col items-center gap-0.5">
+            {(
+              [
+                { id: "select", label: "Select & Move (Click Pin to Wire)", Icon: MousePointer2 },
+                { id: "measure", label: "Measure", Icon: Ruler },
+                { id: "draw", label: "Draw Geometry / Busbar", Icon: Square },
+                { id: "pan", label: "Pan Canvas", Icon: Hand },
+              ] as const
+            ).map(({ id, label, Icon }) => {
+              const active = canvasTool2D === id;
+              return (
+                <div key={id} className="relative group/tip">
+                  <button
+                    type="button"
+                    aria-label={label}
+                    onClick={() => setCanvasTool2D(id)}
+                    className={`p-1.5 rounded-lg transition-all flex items-center justify-center cursor-pointer ${
+                      active
+                        ? "bg-slate-900 text-white dark:bg-white dark:text-black shadow-xs"
+                        : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/70 dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-white/10"
+                    }`}
+                  >
+                    <Icon className="h-4 w-4" />
+                  </button>
+                  <span
+                    role="tooltip"
+                    className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2.5 z-50 whitespace-nowrap rounded-lg border px-2 py-1 text-[11px] font-medium opacity-0 scale-95 transition-all duration-100 group-hover/tip:opacity-100 group-hover/tip:scale-100 shadow-xl bg-slate-900 text-slate-100 border-slate-800 dark:bg-[#161922] dark:text-zinc-200 dark:border-white/15"
+                  >
+                    {label}
+                  </span>
+                </div>
+              );
+            })}
           </div>
-        )}
 
-        {/* Undo / Redo in Toolbar */}
-        <div className="flex shrink-0 items-center rounded-full border border-[#e2e8f0] dark:border-white/10 bg-[#f1f5f9] dark:bg-[#0c0e14] p-0.5">
-          <button
-            type="button"
-            onClick={undo}
-            disabled={!canUndo}
-            title="Undo (Ctrl+Z)"
-            className="flex items-center rounded-full p-1 text-[#334155] dark:text-slate-300 hover:bg-[#e2e8f0] dark:hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent"
-          >
-            <Undo2 className="h-3.5 w-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={redo}
-            disabled={!canRedo}
-            title="Redo (Ctrl+Y / Ctrl+Shift+Z)"
-            className="flex items-center rounded-full p-1 text-[#334155] dark:text-slate-300 hover:bg-[#e2e8f0] dark:hover:bg-white/10 disabled:opacity-30 disabled:hover:bg-transparent"
-          >
-            <Redo2 className="h-3.5 w-3.5" />
-          </button>
-        </div>
+          {/* Separator */}
+          <div className="h-[1px] w-5 my-0.5 bg-slate-200 dark:bg-white/10 shrink-0" />
 
-        {/* Grid Snap Selector Pill */}
-        <div className="flex shrink-0 items-center rounded-full border border-[#e2e8f0] dark:border-white/10 bg-[#f1f5f9] dark:bg-[#0c0e14] p-0.5">
-          {([1, 5, 10, 25] as GridSnapMm[]).map((snap) => (
+          {/* Undo / Redo (Icon-only + Right Tooltip) */}
+          <div className="flex flex-col items-center gap-0.5">
+            <div className="relative group/tip">
+              <button
+                type="button"
+                onClick={undo}
+                disabled={!canUndo}
+                aria-label="Undo (Ctrl+Z)"
+                className="p-1.5 rounded-lg transition-all flex items-center justify-center cursor-pointer text-slate-600 hover:text-slate-900 hover:bg-slate-200/70 dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-white/10 disabled:opacity-25 disabled:pointer-events-none"
+              >
+                <Undo2 className="h-4 w-4" />
+              </button>
+              <span
+                role="tooltip"
+                className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2.5 z-50 whitespace-nowrap rounded-lg border px-2 py-1 text-[11px] font-medium opacity-0 scale-95 transition-all duration-100 group-hover/tip:opacity-100 group-hover/tip:scale-100 shadow-xl bg-slate-900 text-slate-100 border-slate-800 dark:bg-[#161922] dark:text-zinc-200 dark:border-white/15"
+              >
+                Undo (Ctrl+Z)
+              </span>
+            </div>
+            <div className="relative group/tip">
+              <button
+                type="button"
+                onClick={redo}
+                disabled={!canRedo}
+                aria-label="Redo (Ctrl+Y)"
+                className="p-1.5 rounded-lg transition-all flex items-center justify-center cursor-pointer text-slate-600 hover:text-slate-900 hover:bg-slate-200/70 dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-white/10 disabled:opacity-25 disabled:pointer-events-none"
+              >
+                <Redo2 className="h-4 w-4" />
+              </button>
+              <span
+                role="tooltip"
+                className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2.5 z-50 whitespace-nowrap rounded-lg border px-2 py-1 text-[11px] font-medium opacity-0 scale-95 transition-all duration-100 group-hover/tip:opacity-100 group-hover/tip:scale-100 shadow-xl bg-slate-900 text-slate-100 border-slate-800 dark:bg-[#161922] dark:text-zinc-200 dark:border-white/15"
+              >
+                Redo (Ctrl+Y)
+              </span>
+            </div>
+          </div>
+
+          {/* Separator */}
+          <div className="h-[1px] w-5 my-0.5 bg-slate-200 dark:bg-white/10 shrink-0" />
+
+          {/* Grid Snap Icon + Popover (1, 5, 10, 20 mm) */}
+          <div ref={gridPopoverRef} className="relative group/tip">
             <button
-              key={snap}
               type="button"
-              onClick={() => setGridSnapMm(snap)}
-              className={`rounded-full px-2 py-0.5 font-mono text-[10px] transition-all ${
-                gridSnapMm === snap
-                  ? "bg-[#0f172a] text-white dark:bg-white dark:text-black font-bold shadow-xs"
-                  : "text-[#64748b] dark:text-slate-400 hover:text-[#0f172a] dark:hover:text-slate-200"
+              aria-label={`Grid Snap (${gridSnapMm}mm)`}
+              onClick={() => setGridPopoverOpen((v) => !v)}
+              className={`p-1.5 rounded-lg transition-all flex items-center justify-center cursor-pointer ${
+                gridPopoverOpen
+                  ? "bg-slate-900 text-white dark:bg-white dark:text-black shadow-xs"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/70 dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-white/10"
               }`}
             >
-              {snap}mm
+              <Grid className="h-4 w-4" />
             </button>
-          ))}
+            {!gridPopoverOpen && (
+              <span
+                role="tooltip"
+                className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2.5 z-50 whitespace-nowrap rounded-lg border px-2 py-1 text-[11px] font-medium opacity-0 scale-95 transition-all duration-100 group-hover/tip:opacity-100 group-hover/tip:scale-100 shadow-xl bg-slate-900 text-slate-100 border-slate-800 dark:bg-[#161922] dark:text-zinc-200 dark:border-white/15"
+              >
+                Grid Snap ({gridSnapMm}mm)
+              </span>
+            )}
+
+            {gridPopoverOpen && (
+              <div className="absolute left-full top-0 ml-2.5 z-50 w-32 rounded-xl border border-slate-200 dark:border-white/15 bg-white dark:bg-[#161a23] p-1.5 shadow-2xl animate-in fade-in zoom-in-95 duration-100">
+                <div className="px-2 py-1 mb-1 text-[11px] font-semibold text-slate-700 dark:text-zinc-200 border-b border-slate-200 dark:border-white/10">
+                  Grid Snap
+                </div>
+                <div className="flex flex-col gap-0.5">
+                  {([1, 5, 10, 20] as GridSnapMm[]).map((snap) => (
+                    <button
+                      key={snap}
+                      type="button"
+                      onClick={() => {
+                        setGridSnapMm(snap);
+                        setGridPopoverOpen(false);
+                      }}
+                      className={`w-full flex items-center justify-between rounded-lg px-2 py-1.5 text-xs transition-colors cursor-pointer ${
+                        gridSnapMm === snap
+                          ? "bg-slate-900 text-white dark:bg-white dark:text-black font-semibold"
+                          : "text-slate-700 hover:bg-slate-100 dark:text-zinc-300 dark:hover:bg-white/10"
+                      }`}
+                    >
+                      <span>{snap} mm</span>
+                      {gridSnapMm === snap && <Check className="h-3 w-3" />}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Toggle Show All Pin Labels (Smart Auto-LOD vs Always On) */}
+          <div className="relative group/tip">
+            <button
+              type="button"
+              aria-label={showPinLabels ? "Pin Labels: Always On" : "Pin Labels: Smart Auto"}
+              onClick={toggleShowPinLabels}
+              className={`p-1.5 rounded-lg transition-all flex items-center justify-center cursor-pointer ${
+                showPinLabels
+                  ? "bg-slate-900 text-white dark:bg-white dark:text-black shadow-xs"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/70 dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-white/10"
+              }`}
+            >
+              <Tag className="h-4 w-4" />
+            </button>
+            <span
+              role="tooltip"
+              className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2.5 z-50 whitespace-nowrap rounded-lg border px-2 py-1 text-[11px] font-medium opacity-0 scale-95 transition-all duration-100 group-hover/tip:opacity-100 group-hover/tip:scale-100 shadow-xl bg-slate-900 text-slate-100 border-slate-800 dark:bg-[#161922] dark:text-zinc-200 dark:border-white/15"
+            >
+              Pin Labels: {showPinLabels ? "All Visible" : "Smart Auto"}
+            </span>
+          </div>
+
+          {/* Toggle Auto Wire Duct Routing */}
+          <div className="relative group/tip">
+            <button
+              type="button"
+              aria-label={autoRouteDuctsEnabled ? "Auto Wire Duct: ON" : "Auto Wire Duct: OFF"}
+              onClick={() => setAutoRouteDuctsEnabled(!autoRouteDuctsEnabled)}
+              className={`p-1.5 rounded-lg transition-all flex items-center justify-center cursor-pointer ${
+                autoRouteDuctsEnabled
+                  ? "bg-slate-900 text-white dark:bg-white dark:text-black shadow-xs"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/70 dark:text-zinc-400 dark:hover:text-zinc-100 dark:hover:bg-white/10"
+              }`}
+            >
+              <Route className="h-4 w-4" />
+            </button>
+            <span
+              role="tooltip"
+              className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-2.5 z-50 whitespace-nowrap rounded-lg border px-2 py-1 text-[11px] font-medium opacity-0 scale-95 transition-all duration-100 group-hover/tip:opacity-100 group-hover/tip:scale-100 shadow-xl bg-slate-900 text-slate-100 border-slate-800 dark:bg-[#161922] dark:text-zinc-200 dark:border-white/15"
+            >
+              Auto Wire Duct: {autoRouteDuctsEnabled ? "ON" : "OFF"}
+            </span>
+          </div>
         </div>
 
-        {/* Wire Options when Wire Tool Active */}
-        {canvasTool2D === "wire" && (
-          <div className="flex items-center gap-1.5 border-l border-[#e2e8f0] dark:border-white/10 pl-2">
-            <div className="flex items-center gap-1">
-              {WIRE_COLORS.map((wc) => (
-                <button
-                  key={wc.code}
-                  type="button"
-                  onClick={() => setActiveWireColor(wc.code)}
-                  className={`flex items-center gap-1 rounded-full border px-2 py-0.5 font-mono text-[10px] transition-all ${
-                    activeWireColor === wc.code
-                      ? "border-[#0f172a] dark:border-white bg-slate-200 dark:bg-white/20 text-[#0f172a] dark:text-white font-bold"
-                      : "border-[#e2e8f0] dark:border-white/10 bg-[#f8fafc] dark:bg-[#0c0e14] text-[#64748b] dark:text-slate-400 hover:text-[#0f172a] dark:hover:text-slate-200"
-                  }`}
-                >
-                  <span
-                    className="inline-block h-2 w-2 rounded-full"
+        {/* Contextual Tool Options Pill next to Vertical Toolbar */}
+        {(() => {
+          const showWireControls = Boolean(activeWireStartPin);
+
+          const showBar =
+            showWireControls ||
+            canvasTool2D === "measure" ||
+            canvasTool2D === "draw" ||
+            collisionReport.overlappingIds.size > 0 ||
+            collisionReport.outOfBoundsIds.size > 0;
+
+          if (!showBar) return null;
+
+          return (
+          <div className="flex flex-wrap items-center gap-1.5 rounded-2xl border border-slate-200/90 dark:border-white/15 bg-white/90 dark:bg-[#11141c]/85 px-2.5 py-1.5 shadow-2xl shadow-slate-900/15 dark:shadow-black/60 backdrop-blur-md">
+
+        {/* Wire Options while Quick-Wiring from Pin */}
+        {showWireControls && (
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Pure Circle Color Swatches */}
+            <div className="flex items-center gap-1.5">
+              {WIRE_COLORS.map((wc) => {
+                const isActive = activeWireColor === wc.code;
+                return (
+                  <button
+                    key={wc.code}
+                    type="button"
+                    title={wc.label}
+                    aria-label={wc.label}
+                    onClick={() => setActiveWireColor(wc.code)}
                     style={{ backgroundColor: wc.hex }}
+                    className={`h-4 w-4 rounded-full transition-transform cursor-pointer border ${
+                      isActive
+                        ? "scale-115 border-white ring-2 ring-slate-900 dark:ring-white shadow-xs"
+                        : "border-black/20 hover:scale-110 opacity-85 hover:opacity-100"
+                    }`}
                   />
-                  {wc.code}
-                </button>
-              ))}
+                );
+              })}
             </div>
+
+            <div className="h-4 w-px bg-slate-200 dark:bg-white/10" />
+
+            {/* Compact Wire Gauge Dropdown */}
             <select
+              aria-label="Wire Gauge (mm²)"
               value={activeWireGauge}
               onChange={(e) => setActiveWireGauge(e.target.value)}
-              className="rounded-full border border-[#e2e8f0] dark:border-white/10 bg-[#f8fafc] dark:bg-[#0c0e14] px-2 py-0.5 font-mono text-[10px] text-[#0f172a] dark:text-slate-200 outline-none"
+              className="rounded-lg border border-slate-200 dark:border-white/15 bg-[#f8fafc] dark:bg-[#0c0e14] px-2 py-0.5 font-mono text-[10px] font-medium text-[#0f172a] dark:text-slate-200 outline-none cursor-pointer"
             >
-              <option value="0.75">0.75 mm² (Ø2.4)</option>
-              <option value="1.0">1.0 mm² (Ø2.7)</option>
-              <option value="1.5">1.5 mm² (Ø3.0)</option>
-              <option value="2.5">2.5 mm² (Ø3.7)</option>
-              <option value="4.0">4.0 mm² (Ø4.4)</option>
-              <option value="6.0">6.0 mm² (Ø5.2)</option>
-              <option value="10.0">10.0 mm² (Ø6.5)</option>
-              <option value="16.0">16.0 mm² (Ø8.0)</option>
+              {WIRE_GAUGES.map((g) => (
+                <option key={g} value={g}>
+                  {g} mm²
+                </option>
+              ))}
             </select>
+
             <button
               type="button"
               onClick={() => setAutoRouteDuctsEnabled(!autoRouteDuctsEnabled)}
               title="Auto-route new wires through nearby Wire Ducts"
-              className={`flex items-center gap-1 rounded-full border px-2.5 py-0.5 font-mono text-[10px] transition-all ${
+              className={`flex items-center gap-1 rounded-full border px-2 py-0.5 font-sans text-[10px] transition-all cursor-pointer ${
                 autoRouteDuctsEnabled && ducts.length > 0
                   ? "border-sky-500/60 bg-sky-500/15 text-sky-600 dark:text-sky-300 font-semibold"
                   : "border-[#e2e8f0] dark:border-white/10 bg-[#f8fafc] dark:bg-[#0c0e14] text-[#64748b] dark:text-slate-400"
               }`}
             >
-              <span>{autoRouteDuctsEnabled && ducts.length > 0 ? "Duct Auto-Route: ON" : "Duct Auto-Route: OFF"}</span>
+              <span>{autoRouteDuctsEnabled && ducts.length > 0 ? "Duct Route: ON" : "Duct Route: OFF"}</span>
             </button>
-            <button
-              type="button"
-              disabled={wires.length === 0}
-              onClick={() => autoNumberWires()}
-              title="Auto-number all wires on active sheet (Industrial Standard: L1-x, L2-x, N-x, PE-x, W01...)"
-              className="flex items-center gap-1 rounded-full border border-[#e2e8f0] dark:border-white/10 bg-[#f8fafc] dark:bg-[#0c0e14] px-2.5 py-0.5 font-mono text-[10px] text-[#0f172a] dark:text-slate-200 hover:border-emerald-500 hover:text-emerald-600 dark:hover:text-emerald-400 disabled:opacity-40 transition-all"
-            >
-              <Hash className="h-3 w-3 text-emerald-500" />
-              <span>Auto-Number</span>
-            </button>
-            {activeWireStartPin && (
-              <span className="font-mono text-[10px] font-semibold text-amber-500 animate-pulse">
-                Click target pin...
-              </span>
-            )}
+
+            <span className="font-sans text-[10px] font-semibold text-sky-600 dark:text-sky-400 animate-pulse">
+              Klik/lepas di pin tujuan...
+            </span>
           </div>
         )}
 
         {canvasTool2D === "measure" && (
           <div className="flex items-center gap-2 border-l border-[#e2e8f0] dark:border-white/10 pl-2">
-            <span className="font-mono text-[10px] font-semibold text-sky-600 dark:text-sky-400">
+            <span className="font-sans text-[10px] font-semibold text-sky-600 dark:text-sky-400">
               {!measureStart
                 ? "Click point A"
                 : !measureEnd
@@ -2283,14 +2636,14 @@ export function Panel2DCanvas() {
 
         {canvasTool2D === "draw" && (
           <div className="flex items-center gap-1.5 border-l border-[#e2e8f0] dark:border-white/10 pl-2">
-            <span className="font-mono text-[10px] font-semibold text-amber-600 dark:text-amber-400 mr-1">
+            <span className="font-sans text-[10px] font-semibold text-amber-600 dark:text-amber-400 mr-1">
               Shape:
             </span>
             <div className="flex items-center gap-1">
               <button
                 type="button"
                 onClick={() => setDrawShapeMode("rectangle")}
-                className={`flex items-center gap-1 rounded-full border px-2.5 py-0.5 font-mono text-[10px] transition-all ${
+                className={`flex items-center gap-1 rounded-full border px-2.5 py-0.5 font-sans text-[10px] transition-all ${
                   drawShapeMode === "rectangle"
                     ? "border-amber-500 bg-amber-500/20 text-amber-700 dark:text-amber-300 font-bold"
                     : "border-[#e2e8f0] dark:border-white/10 bg-[#f8fafc] dark:bg-[#0c0e14] text-[#64748b] dark:text-slate-400 hover:text-[#0f172a] dark:hover:text-slate-200"
@@ -2302,7 +2655,7 @@ export function Panel2DCanvas() {
               <button
                 type="button"
                 onClick={() => setDrawShapeMode("circle")}
-                className={`flex items-center gap-1 rounded-full border px-2.5 py-0.5 font-mono text-[10px] transition-all ${
+                className={`flex items-center gap-1 rounded-full border px-2.5 py-0.5 font-sans text-[10px] transition-all ${
                   drawShapeMode === "circle"
                     ? "border-amber-500 bg-amber-500/20 text-amber-700 dark:text-amber-300 font-bold"
                     : "border-[#e2e8f0] dark:border-white/10 bg-[#f8fafc] dark:bg-[#0c0e14] text-[#64748b] dark:text-slate-400 hover:text-[#0f172a] dark:hover:text-slate-200"
@@ -2318,7 +2671,7 @@ export function Panel2DCanvas() {
         {(collisionReport.overlappingIds.size > 0 ||
           collisionReport.outOfBoundsIds.size > 0) && (
           <div className="flex items-center gap-1.5 border-l border-[#e2e8f0] dark:border-white/10 pl-2">
-            <span className="rounded-full border border-rose-500/40 bg-rose-50 dark:bg-rose-950/80 px-2 py-0.5 font-mono text-[10px] font-semibold text-rose-700 dark:text-rose-300">
+            <span className="rounded-full border border-rose-500/40 bg-rose-50 dark:bg-rose-950/80 px-2 py-0.5 font-sans text-[10px] font-semibold text-rose-700 dark:text-rose-300">
               {collisionReport.overlappingIds.size > 0 &&
                 `${collisionReport.overlapPairs.length} overlap`}
               {collisionReport.overlappingIds.size > 0 &&
@@ -2329,12 +2682,22 @@ export function Panel2DCanvas() {
             </span>
           </div>
         )}
+          </div>
+          );
+        })()}
       </div>
+
+      {/* Selection Floating Action Popover Bar (Centered above selected item) */}
+      <SelectionFloatingBar
+        anchorPos={selectionTopCenter}
+        placement={selectionTopCenter?.placement ?? "top"}
+        visible={Boolean(!dragState && selectionTopCenter)}
+      />
 
       {/* Bottom Floating Status Pills (Senada RelayFlow) */}
       {/* Bottom Left / Center: Cursor & Snap Coordinates + Zoom Controls */}
       <div className="absolute bottom-2 sm:bottom-3 left-7 sm:left-9 z-20 flex max-w-[calc(100vw-3.5rem)] flex-wrap items-center gap-1.5 sm:gap-2">
-        <div className="hidden sm:inline-flex rounded-full border border-[#e2e8f0] dark:border-white/10 bg-white/95 dark:bg-[#171a21]/95 px-3 py-1 font-mono text-[11px] tabular-nums text-[#0f172a] dark:text-slate-300 shadow-sm dark:shadow-xl backdrop-blur-xl">
+        <div className="hidden sm:inline-flex rounded-full border border-[#e2e8f0] dark:border-white/10 bg-white/95 dark:bg-[#171a21]/95 px-3 py-1 font-sans text-[11px] tabular-nums text-[#0f172a] dark:text-slate-300 shadow-sm dark:shadow-xl backdrop-blur-xl">
           {cursorPlate
             ? `X: ${Math.round(cursorPlate.xMm)}mm | Y: ${Math.round(
                 cursorPlate.yMm
@@ -2351,7 +2714,7 @@ export function Panel2DCanvas() {
           >
             <ZoomOut className="h-3.5 w-3.5" />
           </button>
-          <span className="min-w-[36px] sm:min-w-[42px] text-center font-mono text-[10px] sm:text-[11px] font-medium tabular-nums text-[#0f172a] dark:text-slate-200">
+          <span className="min-w-[36px] sm:min-w-[42px] text-center font-sans text-[10px] sm:text-[11px] font-medium tabular-nums text-[#0f172a] dark:text-slate-200">
             {Math.round(zoom * 100)}%
           </span>
           <button
@@ -2365,7 +2728,7 @@ export function Panel2DCanvas() {
           <button
             type="button"
             onClick={fitToView}
-            className="flex items-center gap-1 rounded-full px-1.5 sm:px-2 py-0.5 font-mono text-[10px] text-[#64748b] dark:text-slate-400 hover:bg-[#f1f5f9] dark:hover:bg-white/10 hover:text-[#0f172a] dark:hover:text-white transition-colors"
+            className="flex items-center gap-1 rounded-full px-1.5 sm:px-2 py-0.5 font-sans text-[10px] text-[#64748b] dark:text-slate-400 hover:bg-[#f1f5f9] dark:hover:bg-white/10 hover:text-[#0f172a] dark:hover:text-white transition-colors"
             title="Fit Sheet to View"
           >
             <Maximize2 className="h-3 w-3" />
@@ -2375,7 +2738,7 @@ export function Panel2DCanvas() {
       </div>
 
       {/* Bottom Right: Parts & Wires Count & Collisions Pill */}
-      <div className="pointer-events-none absolute right-2 sm:right-4 bottom-2 sm:bottom-3 z-20 flex items-center gap-1.5 sm:gap-2 rounded-full border border-[#e2e8f0] dark:border-white/10 bg-white/95 dark:bg-[#171a21]/95 px-2.5 sm:px-3 py-1 font-mono text-[10px] sm:text-[11px] text-[#0f172a] dark:text-slate-300 shadow-sm dark:shadow-xl backdrop-blur-xl">
+      <div className="pointer-events-none absolute right-2 sm:right-4 bottom-2 sm:bottom-3 z-20 flex items-center gap-1.5 sm:gap-2 rounded-full border border-[#e2e8f0] dark:border-white/10 bg-white/95 dark:bg-[#171a21]/95 px-2.5 sm:px-3 py-1 font-sans text-[10px] sm:text-[11px] text-[#0f172a] dark:text-slate-300 shadow-sm dark:shadow-xl backdrop-blur-xl">
         <span>Parts: {components.length + cadAssets.length}</span>
         <span className="text-[#cbd5e1] dark:text-white/20">|</span>
         <span>Wires: {wires.length}</span>
@@ -2537,6 +2900,7 @@ export function Panel2DCanvas() {
                         return;
                       }
                       setSelected({ kind: "duct", id: d.id });
+                      pushUndoSnapshot();
                       setDragState({
                         type: "duct-move",
                         id: d.id,
@@ -2564,17 +2928,39 @@ export function Panel2DCanvas() {
                     }}
                     className="cursor-move"
                   >
-                    <rect
-                      x={x}
-                      y={y}
-                      width={d.widthMm}
-                      height={d.heightMm}
-                      fill="url(#duct-hatch)"
-                      fillOpacity={0.35}
-                      stroke={isSelected ? "#0284c7" : "#64748b"}
-                      strokeWidth={isSelected ? 1.2 : 0.7}
-                      strokeDasharray="3,2"
-                    />
+                    {(() => {
+                      const hasDuctOverlap = collidingDuctIds.has(d.id);
+                      return (
+                        <>
+                          {hasDuctOverlap && (
+                            <rect
+                              x={x - 1.2}
+                              y={y - 1.2}
+                              width={d.widthMm + 2.4}
+                              height={d.heightMm + 2.4}
+                              fill="#ef4444"
+                              fillOpacity={0.12}
+                              stroke="#ef4444"
+                              strokeWidth={1.1}
+                              strokeDasharray="3,2"
+                              rx={1}
+                              pointerEvents="none"
+                            />
+                          )}
+                          <rect
+                            x={x}
+                            y={y}
+                            width={d.widthMm}
+                            height={d.heightMm}
+                            fill="url(#duct-hatch)"
+                            fillOpacity={0.35}
+                            stroke={hasDuctOverlap ? "#ef4444" : isSelected ? "#0284c7" : "#64748b"}
+                            strokeWidth={hasDuctOverlap ? 1.3 : isSelected ? 1.2 : 0.7}
+                            strokeDasharray="3,2"
+                          />
+                        </>
+                      );
+                    })()}
                     <text
                       x={x + 4}
                       y={y + 10}
@@ -2637,6 +3023,7 @@ export function Panel2DCanvas() {
                         className="cursor-ew-resize"
                         onPointerDown={(e) => {
                           e.stopPropagation();
+                          pushUndoSnapshot();
                           const w = screenToWorld(e.clientX, e.clientY);
                           setDragState({
                             type: "duct-resize",
@@ -2657,6 +3044,7 @@ export function Panel2DCanvas() {
                         className="cursor-ns-resize"
                         onPointerDown={(e) => {
                           e.stopPropagation();
+                          pushUndoSnapshot();
                           const w = screenToWorld(e.clientX, e.clientY);
                           setDragState({
                             type: "duct-resize",
@@ -2714,6 +3102,7 @@ export function Panel2DCanvas() {
                         return;
                       }
                       setSelected({ kind: "rail", id: r.id });
+                      pushUndoSnapshot();
                       setDragState({
                         type: "rail-move",
                         id: r.id,
@@ -2741,16 +3130,38 @@ export function Panel2DCanvas() {
                     }}
                     className="cursor-move"
                   >
-                    <rect
-                      x={x}
-                      y={y}
-                      width={r.lengthMm}
-                      height={35}
-                      fill="#94a3b8"
-                      fillOpacity={0.22}
-                      stroke={isSelected ? "#0284c7" : "#475569"}
-                      strokeWidth={isSelected ? 1.2 : 0.8}
-                    />
+                    {(() => {
+                      const hasRailOverlap = collidingRailIds.has(r.id);
+                      return (
+                        <>
+                          {hasRailOverlap && (
+                            <rect
+                              x={x - 1.2}
+                              y={y - 1.2}
+                              width={r.lengthMm + 2.4}
+                              height={37.4}
+                              fill="#ef4444"
+                              fillOpacity={0.12}
+                              stroke="#ef4444"
+                              strokeWidth={1.1}
+                              strokeDasharray="3,2"
+                              rx={1}
+                              pointerEvents="none"
+                            />
+                          )}
+                          <rect
+                            x={x}
+                            y={y}
+                            width={r.lengthMm}
+                            height={35}
+                            fill="#94a3b8"
+                            fillOpacity={0.22}
+                            stroke={hasRailOverlap ? "#ef4444" : isSelected ? "#0284c7" : "#475569"}
+                            strokeWidth={hasRailOverlap ? 1.3 : isSelected ? 1.2 : 0.8}
+                          />
+                        </>
+                      );
+                    })()}
                     <line
                       x1={x}
                       y1={y + 6}
@@ -2802,6 +3213,7 @@ export function Panel2DCanvas() {
                         className="cursor-ew-resize"
                         onPointerDown={(e) => {
                           e.stopPropagation();
+                          pushUndoSnapshot();
                           const w = screenToWorld(e.clientX, e.clientY);
                           setDragState({
                             type: "rail-resize",
@@ -2822,6 +3234,7 @@ export function Panel2DCanvas() {
                         className="cursor-ew-resize"
                         onPointerDown={(e) => {
                           e.stopPropagation();
+                          pushUndoSnapshot();
                           const w = screenToWorld(e.clientX, e.clientY);
                           setDragState({
                             type: "rail-resize",
@@ -2966,11 +3379,40 @@ export function Panel2DCanvas() {
                 comp={comp}
                 isSelected={isSelected}
                 isWireMode={canvasTool2D === "wire"}
+                canQuickWire={canvasTool2D === "select" && !spacePressed}
+                isDark={theme === "dark"}
+                zoom={zoom}
+                showAllPinLabels={showPinLabels}
+                obstacleBoxes={cadObstacleBoxes}
                 activeWireStartPin={activeWireStartPin}
                 hasCollision={collisionReport.overlappingIds.has(comp.id)}
                 isOutOfBounds={collisionReport.outOfBoundsIds.has(comp.id)}
                 onPointerDown={(e) => {
-                  if (e.button !== 0 || canvasTool2D !== "select" || spacePressed) return;
+                  if (e.button !== 0 || spacePressed) return;
+                  if (activeWireStartPin && (canvasTool2D === "select" || canvasTool2D === "wire")) {
+                    e.stopPropagation();
+                    // Magnetic snap: if user clicks near any pin on this component while wiring, finish wire to nearest pin
+                    const w = screenToWorld(e.clientX, e.clientY);
+                    const rot = comp.rotationDeg ?? 0;
+                    let nearestPinId: string | null = null;
+                    let bestDist = 10;
+                    for (const p of comp.pins) {
+                      const rp = rotateLocalPoint(p.localXMm, p.localYMm, rot);
+                      const d = Math.hypot(
+                        comp.xMm + rp.xMm - w.xMm,
+                        comp.yMm + rp.yMm - w.yMm
+                      );
+                      if (d <= bestDist) {
+                        bestDist = d;
+                        nearestPinId = p.id;
+                      }
+                    }
+                    if (nearestPinId) {
+                      handlePinClick(comp.id, nearestPinId);
+                    }
+                    return;
+                  }
+                  if (canvasTool2D !== "select") return;
                   e.stopPropagation();
                   if (e.shiftKey) {
                     toggleSelectId({ kind: "component", id: comp.id });
@@ -2990,6 +3432,7 @@ export function Panel2DCanvas() {
                   }
                   setSelected({ kind: "component", id: comp.id });
                   if (!comp.locked) {
+                    pushUndoSnapshot();
                     setDragState({
                       type: "component",
                       id: comp.id,
@@ -3060,6 +3503,7 @@ export function Panel2DCanvas() {
                   isSelected={isSelected}
                   isMarkingThis={isMarkingThis}
                   isWireMode={canvasTool2D === "wire"}
+                  canQuickWire={canvasTool2D === "select" && !spacePressed}
                   isDark={theme === "dark"}
                   obstacleBoxes={cadObstacleBoxes}
                   activeWireStartPin={activeWireStartPin}
@@ -3097,6 +3541,7 @@ export function Panel2DCanvas() {
                     }
                     setSelected({ kind: "cad", id: asset.id });
                     if (!asset.locked) {
+                      pushUndoSnapshot();
                       setDragState({
                         type: "cad",
                         id: asset.id,
@@ -3155,15 +3600,52 @@ export function Panel2DCanvas() {
           </g>
 
           {/* Wires / Netlist Layer */}
-          <g>
+          <g pointerEvents={canvasTool2D === "wire" || Boolean(activeWireStartPin) ? "none" : undefined}>
             {wires.map((w) => {
               const p1 = pinMap.get(`${w.fromComponentId}:${w.fromPinId}`);
               const p2 = pinMap.get(`${w.toComponentId}:${w.toPinId}`);
               if (!p1 || !p2) return null;
 
-              const waypoints =
-                w.waypoints && w.waypoints.length >= 2
-                  ? w.waypoints.map((pt) => ({ x: pt.xMm, y: -pt.yMm }))
+              // Live pin-bound routing: verify cached waypoints still match live p1 & p2 (RelayTest pattern)
+              const hasSyncedWaypoints =
+                w.waypoints &&
+                w.waypoints.length >= 2 &&
+                Math.hypot(w.waypoints[0].xMm - p1.x, -w.waypoints[0].yMm - p1.y) < 0.5 &&
+                Math.hypot(
+                  w.waypoints[w.waypoints.length - 1].xMm - p2.x,
+                  -w.waypoints[w.waypoints.length - 1].yMm - p2.y
+                ) < 0.5;
+
+              const wireObstacles = buildComponentObstacles(components, cadAssets);
+              const exit1 = resolvePinExitInfo(
+                components,
+                cadAssets,
+                w.fromComponentId,
+                w.fromPinId
+              );
+              const exit2 = resolvePinExitInfo(
+                components,
+                cadAssets,
+                w.toComponentId,
+                w.toPinId
+              );
+              const waypoints = hasSyncedWaypoints
+                ? w.waypoints!.map((pt) => ({ x: pt.xMm, y: -pt.yMm }))
+                : autoRouteDuctsEnabled && ducts.length > 0
+                  ? routeWireThroughDucts(
+                      { x: p1.x, y: -p1.y },
+                      { x: p2.x, y: -p2.y },
+                      ducts,
+                      rails,
+                      0,
+                      {
+                        startExitDir: exit1?.exitDir,
+                        endExitDir: exit2?.exitDir,
+                        startStubPt: exit1?.stubPt,
+                        endStubPt: exit2?.stubPt,
+                        obstacles: wireObstacles,
+                      }
+                    ).map((pt) => ({ x: pt.x, y: -pt.y }))
                   : routeOrthogonalWire(p1, p2, "horizontal-first");
               const pathD = pointsToRoundedSvgPath(waypoints, 4);
               const stroke = WIRE_COLOR_MAP[w.colorCode] || "#2563eb";
@@ -3240,62 +3722,240 @@ export function Panel2DCanvas() {
                     strokeLinecap="round"
                     strokeLinejoin="round"
                   />
-                  {/* Halo filter / contrast border for clear readability */}
-                  <rect
-                    x={mid.x - Math.max(12, (w.label.length + w.gaugeMm2.length) * 2.8 + 6) / 2}
-                    y={mid.y - 5.5}
-                    width={Math.max(12, (w.label.length + w.gaugeMm2.length) * 2.8 + 6)}
-                    height={11}
-                    rx={2.5}
-                    fill="#ffffff"
-                    stroke={isSelected ? "#0284c7" : stroke}
-                    strokeWidth={isSelected ? 1.0 : 0.6}
-                    filter="drop-shadow(0px 1px 2px rgba(0,0,0,0.18))"
-                  />
-                  <text
-                    x={mid.x}
-                    y={mid.y + 1.2}
-                    fontSize={3.8}
-                    fontFamily="monospace"
-                    fontWeight="bold"
-                    fill="#0f172a"
-                    textAnchor="middle"
-                  >
-                    {w.label} <tspan fill="#64748b" fontSize={3.2}>({w.gaugeMm2}mm²)</tspan>
-                  </text>
+
+                  {/* Interactive Draggable Segments, Corner Nodes & Midpoint Handles when Wire is Selected */}
+                  {isSelected && !spacePressed && (() => {
+                    const worldWaypoints = waypoints.map((pt) => ({
+                      xMm: pt.x,
+                      yMm: -pt.y,
+                    }));
+                    return (
+                      <g>
+                        {/* Draggable interior orthogonal segments (slide perpendicular to segment) */}
+                        {waypoints.slice(0, -1).map((a, segIdx) => {
+                          const b = waypoints[segIdx + 1];
+                          const isInterior = segIdx > 0 && segIdx + 1 < waypoints.length - 1;
+                          if (!isInterior) return null;
+                          const isHoriz = Math.abs(a.y - b.y) < 1;
+                          const isVert = Math.abs(a.x - b.x) < 1;
+                          if (!isHoriz && !isVert) return null;
+                          return (
+                            <line
+                              key={`wseg-${w.id}-${segIdx}`}
+                              x1={a.x}
+                              y1={a.y}
+                              x2={b.x}
+                              y2={b.y}
+                              stroke="transparent"
+                              strokeWidth={8}
+                              className={isHoriz ? "cursor-ns-resize" : "cursor-ew-resize"}
+                              onPointerDown={(e) => {
+                                if (e.button !== 0) return;
+                                e.stopPropagation();
+                                pushUndoSnapshot();
+                                setDragState({
+                                  type: "wire-segment",
+                                  wireId: w.id,
+                                  segIndex: segIdx,
+                                  orientation: isHoriz ? "horizontal" : "vertical",
+                                  waypoints: worldWaypoints,
+                                });
+                              }}
+                            />
+                          );
+                        })}
+
+                        {/* Midpoint + handles on EVERY segment (>= 16mm) to pull out unlimited extra bends */}
+                        {waypoints.slice(0, -1).map((a, segIdx) => {
+                          const b = waypoints[segIdx + 1];
+                          const segLen = Math.hypot(b.x - a.x, b.y - a.y);
+                          if (segLen < 16) return null;
+                          const mx = (a.x + b.x) / 2;
+                          const my = (a.y + b.y) / 2;
+                          return (
+                            <g
+                              key={`wmid-${w.id}-${segIdx}`}
+                              className="cursor-grab active:cursor-grabbing"
+                              onPointerDown={(e) => {
+                                if (e.button !== 0) return;
+                                e.stopPropagation();
+                                pushUndoSnapshot();
+                                const inserted = [
+                                  ...worldWaypoints.slice(0, segIdx + 1),
+                                  { xMm: mx, yMm: -my },
+                                  ...worldWaypoints.slice(segIdx + 1),
+                                ];
+                                updateWire(
+                                  w.id,
+                                  { waypoints: inserted },
+                                  { skipHistory: true }
+                                );
+                                setDragState({
+                                  type: "wire-waypoint",
+                                  wireId: w.id,
+                                  index: segIdx + 1,
+                                  waypoints: inserted,
+                                });
+                              }}
+                            >
+                              <circle cx={mx} cy={my} r={5} fill="transparent" />
+                              <circle
+                                cx={mx}
+                                cy={my}
+                                r={2.2}
+                                fill="#e0f2fe"
+                                stroke="#0284c7"
+                                strokeWidth={0.7}
+                                pointerEvents="none"
+                              />
+                              <line
+                                x1={mx - 1.1}
+                                y1={my}
+                                x2={mx + 1.1}
+                                y2={my}
+                                stroke="#0284c7"
+                                strokeWidth={0.55}
+                                pointerEvents="none"
+                              />
+                              <line
+                                x1={mx}
+                                y1={my - 1.1}
+                                x2={mx}
+                                y2={my + 1.1}
+                                stroke="#0284c7"
+                                strokeWidth={0.55}
+                                pointerEvents="none"
+                              />
+                            </g>
+                          );
+                        })}
+
+                        {/* Draggable 90° corner nodes at every bend (RelayTest style) */}
+                        {waypoints.slice(1, -1).map((pt, offsetIdx) => {
+                          const nodeIdx = offsetIdx + 1;
+                          return (
+                            <g
+                              key={`wnode-${w.id}-${nodeIdx}`}
+                              className="cursor-move"
+                              onPointerDown={(e) => {
+                                if (e.button !== 0) return;
+                                e.stopPropagation();
+                                pushUndoSnapshot();
+                                setDragState({
+                                  type: "wire-waypoint",
+                                  wireId: w.id,
+                                  index: nodeIdx,
+                                  waypoints: worldWaypoints,
+                                });
+                              }}
+                              onDoubleClick={(e) => {
+                                e.stopPropagation();
+                                e.preventDefault();
+                                if (worldWaypoints.length <= 2) return;
+                                const pruned = worldWaypoints.filter(
+                                  (_, idx) => idx !== nodeIdx
+                                );
+                                updateWire(w.id, { waypoints: pruned });
+                              }}
+                            >
+                              <circle cx={pt.x} cy={pt.y} r={5.5} fill="transparent" />
+                              <circle
+                                cx={pt.x}
+                                cy={pt.y}
+                                r={2.8}
+                                fill="#ffffff"
+                                stroke="#0284c7"
+                                strokeWidth={0.95}
+                                pointerEvents="none"
+                              />
+                              <circle
+                                cx={pt.x}
+                                cy={pt.y}
+                                r={1.0}
+                                fill="#0284c7"
+                                pointerEvents="none"
+                              />
+                            </g>
+                          );
+                        })}
+                      </g>
+                    );
+                  })()}
                 </g>
               );
             })}
 
-            {/* Live Wire Preview */}
-            {canvasTool2D === "wire" && activeWireStartPin && cursorWorld && (() => {
+            {/* Live Wire Preview with Magnetic Pin Snap */}
+            {activeWireStartPin && cursorWorld && (() => {
               const p1 = pinMap.get(
                 `${activeWireStartPin.componentId}:${activeWireStartPin.pinId}`
               );
               if (!p1) return null;
+              const snappedTarget = findNearestPin(
+                cursorWorld.xMm,
+                cursorWorld.yMm,
+                10,
+                activeWireStartPin
+              );
+              const endWorldX = snappedTarget ? snappedTarget.xMm : cursorWorld.xMm;
+              const endWorldY = snappedTarget ? snappedTarget.yMm : cursorWorld.yMm;
+              const previewObstacles = buildComponentObstacles(components, cadAssets);
+              const startExit = resolvePinExitInfo(
+                components,
+                cadAssets,
+                activeWireStartPin.componentId,
+                activeWireStartPin.pinId
+              );
+              const endExit = snappedTarget
+                ? resolvePinExitInfo(
+                    components,
+                    cadAssets,
+                    snappedTarget.componentId,
+                    snappedTarget.pinId
+                  )
+                : null;
               const previewPts =
                 autoRouteDuctsEnabled && ducts.length > 0
                   ? routeWireThroughDucts(
                       { x: p1.x, y: -p1.y },
-                      { x: cursorWorld.xMm, y: cursorWorld.yMm },
+                      { x: endWorldX, y: endWorldY },
                       ducts,
                       rails,
-                      wires.length
+                      wires.length,
+                      {
+                        startExitDir: startExit?.exitDir,
+                        endExitDir: endExit?.exitDir,
+                        startStubPt: startExit?.stubPt,
+                        endStubPt: endExit?.stubPt,
+                        obstacles: previewObstacles,
+                      }
                     ).map((pt) => ({ x: pt.x, y: -pt.y }))
                   : routeOrthogonalWire(
                       p1,
-                      { x: cursorWorld.xMm, y: -cursorWorld.yMm },
+                      { x: endWorldX, y: -endWorldY },
                       "horizontal-first"
                     );
               return (
-                <path
-                  d={pointsToSvgPath(previewPts)}
-                  fill="none"
-                  stroke={WIRE_COLOR_MAP[activeWireColor] || "#0284c7"}
-                  strokeWidth={1.1}
-                  strokeDasharray="3,2"
-                  className="pointer-events-none"
-                />
+                <g className="pointer-events-none">
+                  <path
+                    d={pointsToSvgPath(previewPts)}
+                    fill="none"
+                    stroke={WIRE_COLOR_MAP[activeWireColor] || "#0284c7"}
+                    strokeWidth={snappedTarget ? 1.4 : 1.1}
+                    strokeDasharray={snappedTarget ? undefined : "3,2"}
+                  />
+                  {snappedTarget && (
+                    <circle
+                      cx={snappedTarget.xMm}
+                      cy={-snappedTarget.yMm}
+                      r={4.2}
+                      fill="#0284c7"
+                      fillOpacity={0.22}
+                      stroke="#0284c7"
+                      strokeWidth={0.9}
+                    />
+                  )}
+                </g>
               );
             })()}
           </g>
@@ -3701,7 +4361,7 @@ export function Panel2DCanvas() {
                     setInlinePinEdit(null);
                   }
                 }}
-                className="w-16 rounded border border-amber-400 bg-white dark:bg-[#1e222d] px-1.5 py-0.5 font-mono text-xs font-bold text-amber-600 dark:text-amber-300 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                className="w-16 rounded border border-amber-400 bg-white dark:bg-[#1e222d] px-1.5 py-0.5 font-sans text-xs font-bold text-amber-600 dark:text-amber-300 focus:outline-none focus:ring-1 focus:ring-amber-500"
                 placeholder="Label"
               />
               <button

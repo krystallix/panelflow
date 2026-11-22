@@ -127,7 +127,12 @@ function CadAssetItem3D({
   useEffect(() => {
     if (dxfGeometry) {
       const current = asset.boundingBoxMm;
-      const next = dxfGeometry.bbox;
+      const next = {
+        w: dxfGeometry.bbox.w,
+        h: dxfGeometry.bbox.h,
+        // Preserve real 3D depth when rendering a 2D DXF (which has z-span <= 1 mm)
+        d: dxfGeometry.bbox.d <= 1 && current.d > 1 ? current.d : dxfGeometry.bbox.d,
+      };
       if (
         current.w !== next.w ||
         current.h !== next.h ||
@@ -176,7 +181,7 @@ function CadAssetItem3D({
               args={[
                 Math.max(10, dxfGeometry.bbox.w),
                 Math.max(10, dxfGeometry.bbox.h),
-                Math.max(4, dxfGeometry.bbox.d),
+                Math.max(4, asset.boundingBoxMm.d, dxfGeometry.bbox.d),
               ]}
             />
             <meshBasicMaterial transparent opacity={0.06} color="#38bdf8" />
@@ -251,7 +256,7 @@ function CadAssetItem3D({
             position={[0, 8, 6]}
             style={{ pointerEvents: "none" }}
           >
-            <span className="rounded bg-amber-950/90 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-amber-300 border border-amber-500/60 whitespace-nowrap">
+            <span className="rounded bg-amber-950/90 px-1.5 py-0.5 font-sans text-[10px] font-semibold text-amber-300 border border-amber-500/60 whitespace-nowrap">
               {pin.label}
             </span>
           </Html>

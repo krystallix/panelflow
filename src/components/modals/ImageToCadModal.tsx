@@ -2,7 +2,6 @@
 
 import React, { useState, useRef, useId, useCallback } from "react";
 import {
-  X,
   Upload,
   MapPin,
   FolderPlus,
@@ -14,7 +13,9 @@ import {
   Layers,
   Lock,
   Unlock,
+  X,
 } from "lucide-react";
+import { Button, Modal } from "@/components/ui";
 import { usePanelStore } from "@/store/usePanelStore";
 import { saveCustomCadToLibrary, updateCustomCadCloudId } from "@/lib/indexed-db";
 import {
@@ -332,10 +333,14 @@ export function ImageToCadModal({ onClose }: ImageToCadModalProps) {
     cropMm.top > 0 || cropMm.bottom > 0 || cropMm.left > 0 || cropMm.right > 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4 select-none">
-      <div className="flex flex-col h-[90vh] max-h-[820px] w-full max-w-5xl rounded-2xl border border-[#cbd5e1] dark:border-white/10 bg-white dark:bg-[#111318] text-[#0f172a] dark:text-slate-100 shadow-2xl overflow-hidden">
+    <Modal
+      isOpen={true}
+      onClose={onClose}
+      maxWidthClassName="max-w-5xl"
+      className="flex flex-col h-[90vh] max-h-[820px] p-0 overflow-hidden text-[#0f172a] dark:text-slate-100"
+    >
         {/* Modal Header */}
-        <div className="flex items-center justify-between border-b border-[#e2e8f0] dark:border-white/10 px-5 py-3.5 bg-[#f8fafc] dark:bg-[#161922]">
+        <div className="flex items-center justify-between border-b border-[#e2e8f0] dark:border-white/10 px-5 py-3.5 bg-[#f8fafc] dark:bg-[#161922] shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sky-500/10 text-sky-500">
               <Sparkles className="h-4 w-4" />
@@ -352,22 +357,26 @@ export function ImageToCadModal({ onClose }: ImageToCadModalProps) {
 
           <div className="flex items-center gap-2">
             {previewDataUrl && (
-              <button
-                type="button"
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => fileInputRef.current?.click()}
-                className="flex items-center gap-1.5 rounded-lg border border-[#cbd5e1] dark:border-white/10 px-3 py-1.5 text-xs font-medium text-[#475569] dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5 transition-colors cursor-pointer"
               >
                 <Upload className="h-3.5 w-3.5" />
                 <span>Replace Image</span>
-              </button>
+              </Button>
             )}
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="icon-sm"
               onClick={onClose}
-              className="rounded-lg p-1.5 text-[#94a3b8] hover:bg-[#f1f5f9] dark:hover:bg-white/10 hover:text-[#0f172a] dark:hover:text-white transition-colors"
+              title="Close"
             >
-              <X className="h-4 w-4" />
-            </button>
+              <span className="sr-only">Close</span>
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M18 6 6 18M6 6l12 12" />
+              </svg>
+            </Button>
           </div>
         </div>
 
@@ -535,7 +544,7 @@ export function ImageToCadModal({ onClose }: ImageToCadModalProps) {
 
                 {/* Bottom preview info */}
                 <div className="flex items-center justify-between w-full max-w-md mt-2 px-1 text-[11px] text-[#64748b] dark:text-slate-400">
-                  <div className="flex items-center gap-2 font-mono">
+                  <div className="flex items-center gap-2 font-sans">
                     <span>{widthMm}×{heightMm} mm</span>
                     <span>•</span>
                     <span>{pins.length} pins</span>
@@ -612,7 +621,7 @@ export function ImageToCadModal({ onClose }: ImageToCadModalProps) {
                       max="2000"
                       value={widthMm}
                       onChange={(e) => handleWidthChange(Number(e.target.value))}
-                      className="w-full rounded-md border border-[#cbd5e1] dark:border-white/10 bg-white dark:bg-[#0c0e14] px-2.5 py-1.5 text-xs font-mono font-semibold"
+                      className="w-full rounded-md border border-[#cbd5e1] dark:border-white/10 bg-white dark:bg-[#0c0e14] px-2.5 py-1.5 text-xs font-sans font-semibold"
                     />
                   </label>
                   <label className="space-y-1">
@@ -623,7 +632,7 @@ export function ImageToCadModal({ onClose }: ImageToCadModalProps) {
                       max="2000"
                       value={heightMm}
                       onChange={(e) => handleHeightChange(Number(e.target.value))}
-                      className="w-full rounded-md border border-[#cbd5e1] dark:border-white/10 bg-white dark:bg-[#0c0e14] px-2.5 py-1.5 text-xs font-mono font-semibold"
+                      className="w-full rounded-md border border-[#cbd5e1] dark:border-white/10 bg-white dark:bg-[#0c0e14] px-2.5 py-1.5 text-xs font-sans font-semibold"
                     />
                   </label>
                   <label className="space-y-1">
@@ -634,7 +643,7 @@ export function ImageToCadModal({ onClose }: ImageToCadModalProps) {
                       max="1000"
                       value={depthMm}
                       onChange={(e) => setDepthMm(Math.max(1, Number(e.target.value) || 1))}
-                      className="w-full rounded-md border border-[#cbd5e1] dark:border-white/10 bg-white dark:bg-[#0c0e14] px-2.5 py-1.5 text-xs font-mono font-semibold"
+                      className="w-full rounded-md border border-[#cbd5e1] dark:border-white/10 bg-white dark:bg-[#0c0e14] px-2.5 py-1.5 text-xs font-sans font-semibold"
                     />
                   </label>
                 </div>
@@ -670,7 +679,7 @@ export function ImageToCadModal({ onClose }: ImageToCadModalProps) {
                       className="h-3.5 w-3.5 rounded border-[#cbd5e1] text-sky-500 focus:ring-sky-500 cursor-pointer"
                     />
                     <span className="text-[11px] font-semibold text-[#0f172a] dark:text-slate-200 flex items-center gap-1">
-                      <Crop className="h-3 w-3 text-sky-500" />
+                      <Crop className="h-3 w-3 text-slate-600 dark:text-zinc-400" />
                       Auto-Crop Whitespace & Shadows
                     </span>
                   </label>
@@ -691,7 +700,7 @@ export function ImageToCadModal({ onClose }: ImageToCadModalProps) {
                         <span className="text-[#64748b] dark:text-slate-400 font-medium">
                           Shadow & Background Tolerance
                         </span>
-                        <span className="font-mono text-sky-500 font-semibold">{colorTolerance}</span>
+                        <span className="font-sans text-sky-500 font-semibold">{colorTolerance}</span>
                       </div>
                       <input
                         type="range"
@@ -724,7 +733,7 @@ export function ImageToCadModal({ onClose }: ImageToCadModalProps) {
                             setCropMm(next);
                             if (rawImageDataUrl) applyCropAndTrim(rawImageDataUrl, next, widthMm, heightMm);
                           }}
-                          className="w-full rounded border border-[#cbd5e1] dark:border-white/10 bg-white dark:bg-[#0c0e14] px-1.5 py-1 text-[11px] font-mono"
+                          className="w-full rounded border border-[#cbd5e1] dark:border-white/10 bg-white dark:bg-[#0c0e14] px-1.5 py-1 text-[11px] font-sans"
                         />
                       </label>
                       <label className="space-y-0.5">
@@ -740,7 +749,7 @@ export function ImageToCadModal({ onClose }: ImageToCadModalProps) {
                             setCropMm(next);
                             if (rawImageDataUrl) applyCropAndTrim(rawImageDataUrl, next, widthMm, heightMm);
                           }}
-                          className="w-full rounded border border-[#cbd5e1] dark:border-white/10 bg-white dark:bg-[#0c0e14] px-1.5 py-1 text-[11px] font-mono"
+                          className="w-full rounded border border-[#cbd5e1] dark:border-white/10 bg-white dark:bg-[#0c0e14] px-1.5 py-1 text-[11px] font-sans"
                         />
                       </label>
                       <label className="space-y-0.5">
@@ -756,7 +765,7 @@ export function ImageToCadModal({ onClose }: ImageToCadModalProps) {
                             setCropMm(next);
                             if (rawImageDataUrl) applyCropAndTrim(rawImageDataUrl, next, widthMm, heightMm);
                           }}
-                          className="w-full rounded border border-[#cbd5e1] dark:border-white/10 bg-white dark:bg-[#0c0e14] px-1.5 py-1 text-[11px] font-mono"
+                          className="w-full rounded border border-[#cbd5e1] dark:border-white/10 bg-white dark:bg-[#0c0e14] px-1.5 py-1 text-[11px] font-sans"
                         />
                       </label>
                       <label className="space-y-0.5">
@@ -772,7 +781,7 @@ export function ImageToCadModal({ onClose }: ImageToCadModalProps) {
                             setCropMm(next);
                             if (rawImageDataUrl) applyCropAndTrim(rawImageDataUrl, next, widthMm, heightMm);
                           }}
-                          className="w-full rounded border border-[#cbd5e1] dark:border-white/10 bg-white dark:bg-[#0c0e14] px-1.5 py-1 text-[11px] font-mono"
+                          className="w-full rounded border border-[#cbd5e1] dark:border-white/10 bg-white dark:bg-[#0c0e14] px-1.5 py-1 text-[11px] font-sans"
                         />
                       </label>
                     </div>
@@ -784,10 +793,10 @@ export function ImageToCadModal({ onClose }: ImageToCadModalProps) {
               <div className="space-y-2 rounded-xl border border-[#e2e8f0] dark:border-white/10 bg-[#f8fafc] dark:bg-[#161922] p-3">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-semibold text-[#0f172a] dark:text-slate-200 flex items-center gap-1.5">
-                    <MapPin className="h-3.5 w-3.5 text-amber-500" />
+                    <MapPin className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
                     Wiring Terminal Pins
                   </span>
-                  <span className="text-[10px] font-mono text-amber-600 dark:text-amber-400 font-semibold">
+                  <span className="text-[10px] font-sans text-amber-600 dark:text-amber-400 font-semibold">
                     {pins.length} placed
                   </span>
                 </div>
@@ -798,7 +807,7 @@ export function ImageToCadModal({ onClose }: ImageToCadModalProps) {
                     value={newPinLabel}
                     onChange={(e) => setNewPinLabel(e.target.value)}
                     placeholder="Pin label (L1, L2, A1...)"
-                    className="flex-1 rounded-md border border-[#cbd5e1] dark:border-white/10 bg-white dark:bg-[#0c0e14] px-2.5 py-1.5 text-xs font-mono font-semibold text-amber-500 focus:outline-none focus:border-amber-500"
+                    className="flex-1 rounded-md border border-[#cbd5e1] dark:border-white/10 bg-white dark:bg-[#0c0e14] px-2.5 py-1.5 text-xs font-sans font-semibold text-amber-500 focus:outline-none focus:border-amber-500"
                   />
                   <span className="text-[10px] text-[#64748b] dark:text-slate-400">
                     Click image to place
@@ -813,8 +822,8 @@ export function ImageToCadModal({ onClose }: ImageToCadModalProps) {
                         key={p.id}
                         className="flex items-center justify-between rounded-md border border-[#e2e8f0] dark:border-white/10 bg-white dark:bg-[#0c0e14] px-2 py-1 text-xs"
                       >
-                        <span className="font-mono font-bold text-amber-500">{p.label}</span>
-                        <span className="font-mono text-[10px] text-[#64748b]">
+                        <span className="font-sans font-bold text-amber-500">{p.label}</span>
+                        <span className="font-sans text-[10px] text-[#64748b]">
                           ({p.localXMm}, {p.localYMm})
                         </span>
                         <button
@@ -833,37 +842,38 @@ export function ImageToCadModal({ onClose }: ImageToCadModalProps) {
 
             {/* Bottom Actions: Place on Canvas & Save to Library */}
             <div className="pt-4 border-t border-[#e2e8f0] dark:border-white/10 space-y-2">
-              <button
-                type="button"
+              <Button
+                variant="primary"
+                size="md"
                 disabled={!previewDataUrl}
                 onClick={handlePlaceOnCanvas}
-                className="flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 hover:bg-black dark:bg-white dark:hover:bg-slate-200 dark:text-black text-white px-4 py-2.5 text-xs font-semibold shadow-xs transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full py-2.5 font-semibold"
               >
                 {placedOnCanvasSuccess ? (
-                  <Check className="h-4 w-4 text-emerald-500" />
+                  <Check className="h-4 w-4 text-slate-600 dark:text-zinc-400" />
                 ) : (
                   <Play className="h-4 w-4" />
                 )}
                 <span>Place on Canvas</span>
-              </button>
+              </Button>
 
-              <button
-                type="button"
+              <Button
+                variant="outline"
+                size="md"
                 disabled={!previewDataUrl}
                 onClick={handleSaveToLibrary}
-                className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#cbd5e1] dark:border-white/10 bg-[#f8fafc] dark:bg-[#161922] hover:bg-[#f1f5f9] dark:hover:bg-white/5 text-[#0f172a] dark:text-slate-200 px-4 py-2 text-xs font-medium transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full"
               >
                 {savedToLibrarySuccess ? (
-                  <Check className="h-3.5 w-3.5 text-emerald-500" />
+                  <Check className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
                 ) : (
-                  <FolderPlus className="h-3.5 w-3.5 text-sky-500" />
+                  <FolderPlus className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
                 )}
                 <span>Save to Library</span>
-              </button>
+              </Button>
             </div>
           </div>
         </div>
-      </div>
 
       <input
         ref={fileInputRef}
@@ -875,6 +885,6 @@ export function ImageToCadModal({ onClose }: ImageToCadModalProps) {
         }}
         className="hidden"
       />
-    </div>
+    </Modal>
   );
 }

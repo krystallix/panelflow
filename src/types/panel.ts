@@ -1,6 +1,6 @@
 export type LengthUnit = "mm" | "cm" | "m";
 export type CadImportUnit = "mm" | "cm" | "m" | "inch";
-export type GridSnapMm = 1 | 5 | 10 | 25;
+export type GridSnapMm = 1 | 5 | 10 | 20 | 25;
 export type DoorMode = "open" | "transparent" | "hidden";
 export type RotationDeg = 0 | 90 | 180 | 270;
 
@@ -62,7 +62,27 @@ export type ComponentCategory =
   | "Terminals & DIN Accessories"
   | "Door & Panel Controls";
 
-export type ComponentMountingType = "din_rail" | "screw_plate" | "door_cutout";
+export type ComponentMountingType =
+  | "din_rail"
+  | "screw_plate"
+  | "door_cutout"
+  | "parent_mount";
+
+export interface ComponentClearanceMm {
+  top?: number;
+  bottom?: number;
+  left?: number;
+  right?: number;
+  reason?: "airflow" | "arc" | "bending";
+}
+
+export interface ComponentBehaviorSpec {
+  sideBySideSnap?: boolean;
+  mountTargetTemplateIds?: ComponentTemplateId[];
+  clearanceMm?: ComponentClearanceMm;
+  recommendedSheet?: "mounting-plate" | "door-cutout";
+  cutoutSummary?: string;
+}
 
 export type ComponentTemplateId =
   | "mcb-1p"
@@ -99,8 +119,11 @@ export interface ComponentTemplate {
   id: ComponentTemplateId;
   name: string;
   shortName: string;
+  referenceModel: string;
+  tagPrefix: string;
   category: ComponentCategory;
-  mountingType?: ComponentMountingType;
+  mountingType: ComponentMountingType;
+  behavior?: ComponentBehaviorSpec;
   widthMm: number;
   heightMm: number;
   depthMm: number;
@@ -114,11 +137,13 @@ export interface PlacedComponent {
   templateId: ComponentTemplateId;
   name: string;
   mountingType?: ComponentMountingType;
+  labelPosition?: CadLabelPosition;
   xMm: number;
   yMm: number;
   zMm: number;
   rotationDeg?: RotationDeg;
   railId: string | null;
+  mountedToComponentId?: string;
   widthMm: number;
   heightMm: number;
   depthMm: number;

@@ -40,12 +40,12 @@ export function CadPreviewThumbnail({
             borderColor: mat.borderColor,
           }}
         >
-          <span className="font-mono text-[8px] font-bold text-black/70">
+          <span className="font-sans text-[8px] font-bold text-black/70">
             {mat.name.split(" ")[0]}
           </span>
         </div>
         {pins.length > 0 && (
-          <span className="absolute bottom-0.5 right-0.5 rounded bg-black/70 px-1 py-0.2 font-mono text-[8px] font-bold text-amber-400">
+          <span className="absolute bottom-0.5 right-0.5 rounded bg-black/70 px-1 py-0.2 font-sans text-[8px] font-bold text-amber-400">
             {pins.length}P
           </span>
         )}
@@ -64,7 +64,7 @@ export function CadPreviewThumbnail({
           style={{ imageRendering: "crisp-edges" }}
         />
         {pins.length > 0 && (
-          <span className="absolute bottom-0.5 right-0.5 rounded bg-black/70 px-1 py-0.2 font-mono text-[8px] font-bold text-amber-400">
+          <span className="absolute bottom-0.5 right-0.5 rounded bg-black/70 px-1 py-0.2 font-sans text-[8px] font-bold text-amber-400">
             {pins.length}P
           </span>
         )}

@@ -2,14 +2,22 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
+  AlertCircle,
   Cloud,
   FolderOpen,
   Loader2,
   Plus,
   RefreshCw,
   Trash2,
-  X,
 } from "lucide-react";
+import {
+  Alert,
+  Badge,
+  Button,
+  SideSheet,
+  SideSheetBody,
+  SideSheetHeader,
+} from "@/components/ui";
 import { rehydrateCadAssets } from "@/lib/project-io";
 import { useAuthStore, type CloudProjectSummary } from "@/store/useAuthStore";
 import { usePanelStore } from "@/store/usePanelStore";
@@ -149,133 +157,139 @@ export function CloudProjectsDrawer() {
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-xs"
-      onMouseDown={(e) => {
-        if (e.target === e.currentTarget) setOpen(false);
-      }}
+    <SideSheet
+      isOpen={open && Boolean(user)}
+      onClose={() => setOpen(false)}
+      side="right"
+      modal={true}
+      widthClassName="w-full max-w-md"
+      className="top-0"
     >
-      <aside className="flex h-full w-full max-w-md flex-col border-l border-[#e2e8f0] dark:border-white/10 bg-white dark:bg-[#111318] shadow-2xl">
-        <div className="flex items-center justify-between border-b border-[#e2e8f0] dark:border-white/10 px-5 py-4">
-          <div className="flex items-center gap-2.5">
-            <Cloud className="h-4.5 w-4.5 text-sky-500 dark:text-sky-400" />
-            <div>
-              <h2 className="text-sm font-semibold text-[#0f172a] dark:text-white">
-                My Cloud Projects
-              </h2>
-              <p className="text-[11px] text-[#64748b] dark:text-slate-400">
-                {user.email}
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={fetchProjects}
-              title="Refresh"
-              className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#e2e8f0] dark:border-white/10 text-[#64748b] dark:text-slate-400 hover:bg-[#f1f5f9] dark:hover:bg-white/10"
-            >
-              <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-            </button>
-            <button
-              type="button"
-              onClick={() => setOpen(false)}
-              className="flex h-7 w-7 items-center justify-center rounded-lg text-[#64748b] dark:text-slate-400 hover:bg-[#f1f5f9] dark:hover:bg-white/10"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-
-        <div className="border-b border-[#e2e8f0] dark:border-white/10 px-5 py-3">
-          <button
-            type="button"
-            disabled={savingNew}
-            onClick={handleSaveAsNew}
-            className="flex h-9 w-full items-center justify-center gap-2 rounded-lg bg-[#0f172a] dark:bg-white text-xs font-semibold text-white dark:text-black transition-opacity hover:opacity-90 disabled:opacity-50"
+      <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pr-3 shrink-0">
+        <SideSheetHeader
+          title="My Cloud Projects"
+          subtitle={user.email}
+          icon={<Cloud className="h-4 w-4 text-slate-600 dark:text-zinc-400" />}
+          className="border-b-0 flex-1"
+        />
+        <div className="flex items-center gap-1.5">
+          <Button
+            variant="outline"
+            size="icon-sm"
+            onClick={fetchProjects}
+            title="Refresh"
           >
-            {savingNew ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Plus className="h-3.5 w-3.5" />
-            )}
-            Save Current Workbench as New Cloud Project
-          </button>
+            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => setOpen(false)}
+            title="Close"
+          >
+            <span className="sr-only">Close</span>
+            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </Button>
         </div>
+      </div>
 
-        {error && (
-          <div className="mx-5 mt-3 rounded-lg border border-rose-200 dark:border-rose-500/30 bg-rose-50 dark:bg-rose-500/10 px-3 py-2 text-xs text-rose-700 dark:text-rose-300">
-            {error}
-          </div>
-        )}
-
-        <div className="flex-1 overflow-y-auto p-4 space-y-2.5">
-          {loading && projects.length === 0 ? (
-            <div className="flex items-center justify-center py-12 text-xs text-[#64748b] dark:text-slate-400">
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Loading cloud projects...
-            </div>
-          ) : projects.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-[#cbd5e1] dark:border-white/10 p-6 text-center text-xs text-[#64748b] dark:text-slate-400">
-              No cloud projects saved yet. Click above or edit your panel to auto-save.
-            </div>
+      <div className="border-b border-slate-200 dark:border-white/10 px-5 py-3 shrink-0">
+        <Button
+          variant="primary"
+          size="md"
+          disabled={savingNew}
+          onClick={handleSaveAsNew}
+          className="w-full rounded-lg font-semibold"
+        >
+          {savingNew ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
           ) : (
-            projects.map((proj) => {
-              const isActive = proj.id === cloudProjectId;
-              return (
-                <div
-                  key={proj.id}
-                  className={`flex items-center justify-between rounded-xl border p-3 transition-colors ${
-                    isActive
-                      ? "border-sky-400 dark:border-sky-500/50 bg-sky-50/60 dark:bg-sky-500/10"
-                      : "border-[#e2e8f0] dark:border-white/10 bg-[#f8fafc] dark:bg-[#171a21]"
-                  }`}
-                >
-                  <div className="min-w-0 flex-1 pr-3">
-                    <div className="flex items-center gap-2">
-                      <span className="truncate text-xs font-semibold text-[#0f172a] dark:text-white">
-                        {proj.name}
-                      </span>
-                      {isActive && (
-                        <span className="rounded bg-sky-500/15 px-1.5 py-0.5 font-mono text-[9px] font-semibold text-sky-600 dark:text-sky-400">
-                          ACTIVE
-                        </span>
-                      )}
-                    </div>
-                    <p className="mt-0.5 font-mono text-[10px] text-[#64748b] dark:text-slate-400">
-                      Updated {new Date(proj.updated_at).toLocaleString()}
-                    </p>
-                  </div>
-
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      disabled={openingId === proj.id}
-                      onClick={() => handleOpenProject(proj.id)}
-                      className="flex h-7 items-center gap-1 rounded-lg border border-[#e2e8f0] dark:border-white/10 bg-white dark:bg-[#0c0e14] px-2.5 text-[11px] font-medium text-[#0f172a] dark:text-slate-200 hover:bg-[#f1f5f9] dark:hover:bg-white/10"
-                    >
-                      {openingId === proj.id ? (
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                      ) : (
-                        <FolderOpen className="h-3 w-3 text-sky-500" />
-                      )}
-                      Open
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteProject(proj.id)}
-                      title="Delete Cloud Project"
-                      className="flex h-7 w-7 items-center justify-center rounded-lg border border-[#e2e8f0] dark:border-white/10 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/15"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </button>
-                  </div>
-                </div>
-              );
-            })
+            <Plus className="h-3.5 w-3.5" />
           )}
+          Save Current Workbench as New Cloud Project
+        </Button>
+      </div>
+
+      {error && (
+        <div className="px-5 pt-3 shrink-0">
+          <Alert
+            variant="error"
+            icon={<AlertCircle className="h-3.5 w-3.5" />}
+            className="px-3 py-2 rounded-lg"
+          >
+            {error}
+          </Alert>
         </div>
-      </aside>
-    </div>
+      )}
+
+      <SideSheetBody className="p-4 space-y-2.5">
+        {loading && projects.length === 0 ? (
+          <div className="flex items-center justify-center py-12 text-xs text-slate-500 dark:text-slate-400">
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Loading cloud projects...
+          </div>
+        ) : projects.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-slate-300 dark:border-white/10 p-6 text-center text-xs text-slate-500 dark:text-slate-400">
+            No cloud projects saved yet. Click above or edit your panel to auto-save.
+          </div>
+        ) : (
+          projects.map((proj) => {
+            const isActive = proj.id === cloudProjectId;
+            return (
+              <div
+                key={proj.id}
+                className={`flex items-center justify-between rounded-xl border p-3 transition-colors ${
+                  isActive
+                    ? "border-sky-400 dark:border-sky-500/50 bg-sky-50/60 dark:bg-sky-500/10"
+                    : "border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-[#171a21]"
+                }`}
+              >
+                <div className="min-w-0 flex-1 pr-3">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate text-xs font-semibold text-slate-900 dark:text-white">
+                      {proj.name}
+                    </span>
+                    {isActive && (
+                      <Badge variant="blue" className="font-sans text-[9px]">
+                        ACTIVE
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="mt-0.5 font-sans text-[10px] text-slate-500 dark:text-slate-400">
+                    Updated {new Date(proj.updated_at).toLocaleString()}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <Button
+                    variant="outline"
+                    size="xs"
+                    disabled={openingId === proj.id}
+                    onClick={() => handleOpenProject(proj.id)}
+                  >
+                    {openingId === proj.id ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <FolderOpen className="h-3 w-3 text-slate-600 dark:text-zinc-400" />
+                    )}
+                    Open
+                  </Button>
+                  <Button
+                    variant="danger"
+                    size="icon-sm"
+                    onClick={() => handleDeleteProject(proj.id)}
+                    title="Delete Cloud Project"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </SideSheetBody>
+    </SideSheet>
   );
 }

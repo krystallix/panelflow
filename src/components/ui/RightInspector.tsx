@@ -9,13 +9,14 @@ import {
   RotateCcw,
   Sliders,
   Trash2,
-  X,
   AlertTriangle,
   CheckCircle2,
   AlertCircle,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BomPanelTab } from "@/components/ui/BomPanelTab";
+import { ComponentsLayersTab } from "@/components/ui/ComponentsLayersTab";
+import { PanelSetupTab } from "@/components/ui/PanelSetupTab";
 import { computeDoorCutouts, getDoorDimensions } from "@/lib/door-cutout";
 import { calculateDuctFillRatio, getDuctFillStatusColor } from "@/lib/duct-fill";
 import { getEffectiveCadBounds } from "@/lib/collision";
@@ -29,11 +30,7 @@ import {
 } from "@/types/panel";
 import { saveCustomCadToLibrary, updateCustomCadCloudId } from "@/lib/indexed-db";
 
-interface RightInspectorProps {
-  onClose?: () => void;
-}
-
-export function RightInspector({ onClose }: RightInspectorProps) {
+export function RightInspector() {
   const displayUnit = usePanelStore((s) => s.displayUnit);
   const gridSnapMm = usePanelStore((s) => s.gridSnapMm);
   const selected = usePanelStore((s) => s.selected);
@@ -140,27 +137,24 @@ export function RightInspector({ onClose }: RightInspectorProps) {
   }, [doorCutoutSpec]);
 
   const inputClass =
-    "w-full rounded-lg border border-[#e2e8f0] dark:border-white/10 bg-[#f8fafc] dark:bg-[#090b10] px-2.5 py-1.5 font-mono text-[13px] tabular-nums text-[#0f172a] dark:text-slate-100 focus:border-[#0284c7] dark:focus:border-white/30 focus:outline-none";
+    "w-full rounded-lg border border-[#e2e8f0] dark:border-white/10 bg-[#f8fafc] dark:bg-[#090b10] px-2.5 py-1.5 font-sans text-xs tabular-nums text-[#0f172a] dark:text-slate-100 focus:border-[#0284c7] dark:focus:border-white/30 focus:outline-none";
   const cardClass =
     "rounded-xl border border-[#e2e8f0] dark:border-white/10 bg-white dark:bg-[#171a21] p-3 shadow-xs dark:shadow-none";
   const subBoxClass =
     "rounded-lg border border-[#e2e8f0] dark:border-white/5 bg-[#f8fafc] dark:bg-[#090b10]";
 
   return (
-    <>
-      <div
-        className="fixed inset-0 z-40 bg-black/50 backdrop-blur-[1px] lg:hidden"
-        onClick={onClose}
-        aria-hidden="true"
-      />
-      <aside className="fixed inset-y-0 right-0 z-50 flex w-[90vw] max-w-[360px] shrink-0 flex-col overflow-hidden border-l border-[#e2e8f0] dark:border-white/10 bg-[#f8fafc] dark:bg-[#0c0e14]/95 text-xs text-[#0f172a] dark:text-slate-200 shadow-2xl backdrop-blur-xl lg:relative lg:inset-y-auto lg:right-auto lg:z-auto lg:w-[340px] lg:max-w-none lg:shadow-none">
-        {/* Tabbed Sidebar Header */}
+    <aside
+      onClick={(e) => e.stopPropagation()}
+      className="flex h-full w-[300px] sm:w-[330px] lg:w-[350px] shrink-0 flex-col border-l border-[#e2e8f0] dark:border-white/10 bg-[#f8fafc]/95 dark:bg-[#0c0e14]/95 text-xs text-[#0f172a] dark:text-slate-200 backdrop-blur-xl"
+    >
+      {/* Tabbed Sidebar Header */}
       <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[#e2e8f0] dark:border-white/10 px-3 py-2.5">
         <div className="flex flex-1 items-center rounded-lg border border-[#e2e8f0] dark:border-white/10 bg-[#f1f5f9] dark:bg-[#171a21] p-0.5">
           <button
             type="button"
             onClick={() => setRightPanelTab("inspector")}
-            className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-semibold transition-all ${
+            className={`flex flex-1 items-center justify-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition-all cursor-pointer ${
               rightPanelTab === "inspector"
                 ? "bg-white dark:bg-[#222733] text-[#0f172a] dark:text-white shadow-xs"
                 : "text-[#64748b] dark:text-slate-400 hover:text-[#0f172a] dark:hover:text-white"
@@ -171,36 +165,39 @@ export function RightInspector({ onClose }: RightInspectorProps) {
           </button>
           <button
             type="button"
+            onClick={() => setRightPanelTab("panel")}
+            className={`flex flex-1 items-center justify-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition-all cursor-pointer ${
+              rightPanelTab === "panel"
+                ? "bg-white dark:bg-[#222733] text-[#0f172a] dark:text-white shadow-xs"
+                : "text-[#64748b] dark:text-slate-400 hover:text-[#0f172a] dark:hover:text-white"
+            }`}
+          >
+            <Layers className="h-3 w-3 shrink-0" />
+            <span>Components</span>
+          </button>
+          <button
+            type="button"
             onClick={() => setRightPanelTab("bom")}
-            className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-2.5 py-1 text-[11px] font-semibold transition-all ${
+            className={`flex flex-1 items-center justify-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition-all cursor-pointer ${
               rightPanelTab === "bom"
                 ? "bg-white dark:bg-[#222733] text-[#0f172a] dark:text-white shadow-xs"
                 : "text-[#64748b] dark:text-slate-400 hover:text-[#0f172a] dark:hover:text-white"
             }`}
           >
-            <ClipboardList className="h-3 w-3 shrink-0 text-sky-500 dark:text-sky-400" />
-            <span>BOM &amp; Wires</span>
+            <ClipboardList className="h-3 w-3 shrink-0" />
+            <span>BOM</span>
           </button>
         </div>
-
-        {onClose && (
-          <button
-            type="button"
-            onClick={onClose}
-            className="shrink-0 rounded-md p-1 text-[#64748b] dark:text-slate-500 hover:bg-[#e2e8f0] dark:hover:bg-white/10 hover:text-[#0f172a] dark:hover:text-white"
-            title="Collapse Right Sidebar"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        )}
       </div>
 
       {rightPanelTab === "bom" ? (
         <BomPanelTab />
+      ) : rightPanelTab === "panel" ? (
+        <ComponentsLayersTab />
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto p-3 space-y-3">
           <div className="flex items-center justify-between px-0.5">
-            <span className="font-mono text-[10px] font-semibold uppercase tracking-wider text-[#64748b] dark:text-slate-400">
+            <span className="font-sans text-[10px] font-semibold uppercase tracking-wider text-[#64748b] dark:text-slate-400">
               Properties ({displayUnit})
             </span>
           </div>
@@ -208,11 +205,11 @@ export function RightInspector({ onClose }: RightInspectorProps) {
       {activeSheetType === "door-cutout" && doorCutoutSpec && (
         <div className={`${cardClass} space-y-3 border-amber-500/20`}>
           <div className="flex items-center justify-between border-b border-[#e2e8f0] dark:border-white/10 pb-2">
-            <span className="font-semibold text-[13px] text-[#0f172a] dark:text-white flex items-center gap-1.5">
+            <span className="font-semibold text-xs text-[#0f172a] dark:text-white flex items-center gap-1.5">
               <span className="h-2 w-2 rounded-full bg-amber-500 inline-block" />
               Door Drilling Inspector
             </span>
-            <span className="font-mono text-[11px] text-[#64748b] dark:text-slate-400">
+            <span className="font-sans text-[11px] text-[#64748b] dark:text-slate-400">
               {doorCutoutSpec.cutouts.length} cutouts ({doorCutoutSpec.allHoles.length} holes)
             </span>
           </div>
@@ -257,7 +254,7 @@ export function RightInspector({ onClose }: RightInspectorProps) {
                   }
                   className={inputClass}
                 />
-                <span className="font-mono text-[11px] text-[#94a3b8]">mm</span>
+                <span className="font-sans text-[11px] text-[#94a3b8]">mm</span>
               </div>
             </label>
           </div>
@@ -268,7 +265,7 @@ export function RightInspector({ onClose }: RightInspectorProps) {
               Cutout / Hole Breakdown:
             </span>
             {doorHoleBreakdown.length === 0 ? (
-              <p className="font-mono text-[11px] text-[#94a3b8] italic">
+              <p className="font-sans text-[11px] text-[#94a3b8] italic">
                 No door components placed yet. Drag pilot lamps, buttons, or meters onto door sheet.
               </p>
             ) : (
@@ -276,7 +273,7 @@ export function RightInspector({ onClose }: RightInspectorProps) {
                 {doorHoleBreakdown.map((item, idx) => (
                   <div
                     key={idx}
-                    className={`flex items-center justify-between px-2.5 py-1 text-[11px] font-mono ${subBoxClass}`}
+                    className={`flex items-center justify-between px-2.5 py-1 text-[11px] font-sans ${subBoxClass}`}
                   >
                     <span className="text-[#0f172a] dark:text-slate-200">
                       {item.label}
@@ -323,7 +320,7 @@ export function RightInspector({ onClose }: RightInspectorProps) {
           <div className="space-y-3">
             <div className={`${cardClass} space-y-3`}>
               <div className="flex items-center justify-between border-b border-[#e2e8f0] dark:border-white/10 pb-2">
-                <span className="font-mono text-xs font-semibold uppercase tracking-wider text-purple-600 dark:text-purple-400 flex items-center gap-1.5">
+                <span className="font-sans text-xs font-semibold uppercase tracking-wider text-purple-600 dark:text-purple-400 flex items-center gap-1.5">
                   <Layers className="h-4 w-4" />
                   Multiple Selection ({selectedIds.length})
                 </span>
@@ -359,10 +356,10 @@ export function RightInspector({ onClose }: RightInspectorProps) {
           {activeSheetType === "door-cutout" && doorCutoutSpec && (
             <div className={`${cardClass} space-y-3 border-sky-500/30 bg-sky-500/5`}>
               <div className="flex items-center justify-between border-b border-[#e2e8f0] dark:border-white/10 pb-2">
-                <span className="font-mono text-xs font-semibold uppercase tracking-wider text-sky-600 dark:text-sky-400">
+                <span className="font-sans text-xs font-semibold uppercase tracking-wider text-sky-600 dark:text-sky-400">
                   Door Cutout &amp; Drilling Mal
                 </span>
-                <span className="rounded bg-sky-500/20 px-1.5 py-0.5 font-mono text-[11px] font-bold text-sky-600 dark:text-sky-300">
+                <span className="rounded bg-sky-500/20 px-1.5 py-0.5 font-sans text-[11px] font-bold text-sky-600 dark:text-sky-300">
                   {doorCutoutSpec.cutouts.length} Cutouts
                 </span>
               </div>
@@ -404,7 +401,7 @@ export function RightInspector({ onClose }: RightInspectorProps) {
 
               {/* Cutout / Drilling Breakdown */}
               <div className="space-y-1.5 border-t border-[#e2e8f0] dark:border-white/10 pt-2">
-                <div className="flex items-center justify-between font-mono text-[11px] font-semibold text-[#0f172a] dark:text-slate-200">
+                <div className="flex items-center justify-between font-sans text-[11px] font-semibold text-[#0f172a] dark:text-slate-200">
                   <span>Hole Breakdown</span>
                   <span className="text-[10px] text-[#64748b] dark:text-slate-400">
                     Total Holes: {doorCutoutSpec.allHoles.length}
@@ -419,7 +416,7 @@ export function RightInspector({ onClose }: RightInspectorProps) {
                     {doorHoleBreakdown.map((item, idx) => (
                       <div
                         key={idx}
-                        className={`flex items-center justify-between ${subBoxClass} px-2 py-1 font-mono text-[11px]`}
+                        className={`flex items-center justify-between ${subBoxClass} px-2 py-1 font-sans text-[11px]`}
                       >
                         <span className="text-[#334155] dark:text-slate-300">{item.label}</span>
                         <span className="font-bold text-sky-600 dark:text-sky-400">{item.count}x</span>
@@ -451,14 +448,16 @@ export function RightInspector({ onClose }: RightInspectorProps) {
               Select a DIN rail, wire duct, component, or wire in the{" "}
               {viewportMode.toUpperCase()} viewport.
             </p>
-            <p className="font-mono text-[11px] text-[#94a3b8] dark:text-slate-500">
+            <p className="font-sans text-[11px] text-[#94a3b8] dark:text-slate-500">
               Drag items on the mounting plate to snap to grid or nearest DIN rail.
             </p>
           </div>
 
+          <PanelSetupTab />
+
           {viewportMode === "2d" && (
             <div className={`${cardClass} space-y-2.5`}>
-              <div className="font-mono text-xs font-semibold uppercase tracking-wider text-[#64748b] dark:text-slate-400">
+              <div className="font-sans text-xs font-semibold uppercase tracking-wider text-[#64748b] dark:text-slate-400">
                 2D Plot Frame / Title Block
               </div>
               <label className="block space-y-1">
@@ -522,7 +521,7 @@ export function RightInspector({ onClose }: RightInspectorProps) {
       {wire && (
         <div className={`${cardClass} space-y-3`}>
           <div className="flex items-center justify-between">
-            <span className="font-semibold text-[13px] text-[#0f172a] dark:text-white">Wire {wire.label}</span>
+            <span className="font-semibold text-xs text-[#0f172a] dark:text-white">Wire {wire.label}</span>
             <button
               type="button"
               onClick={() => removeWire(wire.id)}
@@ -542,37 +541,54 @@ export function RightInspector({ onClose }: RightInspectorProps) {
             />
           </label>
 
-          <div className="grid grid-cols-2 gap-2">
-            <label className="space-y-1">
-              <span className="text-xs text-[#64748b] dark:text-slate-400">Phase / Color</span>
+          <div className="space-y-2.5">
+            <div className="space-y-1.5">
+              <span className="text-xs text-[#64748b] dark:text-slate-400">Wire Color</span>
+              <div className="flex items-center gap-2 pt-0.5">
+                {(
+                  [
+                    { code: "R", label: "R (L1)", hex: "#dc2626" },
+                    { code: "S", label: "S (L2)", hex: "#eab308" },
+                    { code: "T", label: "T (L3)", hex: "#2563eb" },
+                    { code: "N", label: "N (Neutral)", hex: "#0284c7" },
+                    { code: "PE", label: "PE (Earth)", hex: "#16a34a" },
+                    { code: "DC+", label: "+24V DC", hex: "#ef4444" },
+                    { code: "DC-", label: "0V DC", hex: "#1e293b" },
+                  ] as const
+                ).map((wc) => {
+                  const active = wire.colorCode === wc.code;
+                  return (
+                    <button
+                      key={wc.code}
+                      type="button"
+                      onClick={() => updateWire(wire.id, { colorCode: wc.code })}
+                      title={wc.label}
+                      aria-label={wc.label}
+                      style={{ backgroundColor: wc.hex }}
+                      className={`h-5 w-5 rounded-full transition-transform cursor-pointer border ${
+                        active
+                          ? "scale-115 border-white ring-2 ring-slate-900 dark:ring-white shadow-xs"
+                          : "border-black/20 hover:scale-110 opacity-85 hover:opacity-100"
+                      }`}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+
+            <label className="block space-y-1">
+              <span className="text-xs text-[#64748b] dark:text-slate-400">Wire Size (mm²)</span>
               <select
-                value={wire.colorCode}
-                onChange={(e) =>
-                  updateWire(wire.id, {
-                    colorCode: e.target.value as typeof wire.colorCode,
-                  })
-                }
+                value={wire.gaugeMm2}
+                onChange={(e) => updateWire(wire.id, { gaugeMm2: e.target.value })}
                 className={inputClass}
               >
-                <option value="R">R (L1)</option>
-                <option value="S">S (L2)</option>
-                <option value="T">T (L3)</option>
-                <option value="N">N (Neutral)</option>
-                <option value="PE">PE (Earth)</option>
-                <option value="DC+">DC+ (24V)</option>
-                <option value="DC-">DC- (0V)</option>
+                {["0.75", "1.0", "1.5", "2.5", "4.0", "6.0", "10.0", "16.0"].map((g) => (
+                  <option key={g} value={g}>
+                    {g} mm²
+                  </option>
+                ))}
               </select>
-            </label>
-            <label className="space-y-1">
-              <span className="text-xs text-[#64748b] dark:text-slate-400">Gauge (mm²)</span>
-              <input
-                type="text"
-                value={wire.gaugeMm2}
-                onChange={(e) =>
-                  updateWire(wire.id, { gaugeMm2: e.target.value })
-                }
-                className={inputClass}
-              />
             </label>
           </div>
         </div>
@@ -581,7 +597,7 @@ export function RightInspector({ onClose }: RightInspectorProps) {
       {rail && (
         <div className={`${cardClass} space-y-3`}>
           <div className="flex items-center justify-between">
-            <span className="font-semibold text-[13px] text-[#0f172a] dark:text-white">{rail.name}</span>
+            <span className="font-semibold text-xs text-[#0f172a] dark:text-white">{rail.name}</span>
             <button
               type="button"
               onClick={() => removeRail(rail.id)}
@@ -657,7 +673,7 @@ export function RightInspector({ onClose }: RightInspectorProps) {
       {duct && (
         <div className={`${cardClass} space-y-3`}>
           <div className="flex items-center justify-between">
-            <span className="font-semibold text-[13px] text-[#0f172a] dark:text-white">{duct.name}</span>
+            <span className="font-semibold text-xs text-[#0f172a] dark:text-white">{duct.name}</span>
             <button
               type="button"
               onClick={() => removeDuct(duct.id)}
@@ -710,7 +726,7 @@ export function RightInspector({ onClose }: RightInspectorProps) {
                   Fill Ratio
                 </span>
                 <span
-                  className="font-mono text-xs font-bold px-1.5 py-0.5 rounded"
+                  className="font-sans text-xs font-bold px-1.5 py-0.5 rounded"
                   style={{
                     backgroundColor: getDuctFillStatusColor(ductFillStats.status).badgeBg,
                     color: getDuctFillStatusColor(ductFillStats.status).badgeText,
@@ -731,7 +747,7 @@ export function RightInspector({ onClose }: RightInspectorProps) {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-1 text-[11px] font-mono text-[#64748b] dark:text-slate-400">
+              <div className="grid grid-cols-2 gap-1 text-[11px] font-sans text-[#64748b] dark:text-slate-400">
                 <div>
                   Wires: <span className="text-[#0f172a] dark:text-slate-200 font-semibold">{ductFillStats.wireCount}</span>
                 </div>
@@ -750,7 +766,7 @@ export function RightInspector({ onClose }: RightInspectorProps) {
                   </div>
                   <div>
                     Recommended Size:{" "}
-                    <span className="font-mono font-bold">
+                    <span className="font-sans font-bold">
                       {ductFillStats.recommendedSize.label} mm
                     </span>
                   </div>
@@ -783,7 +799,7 @@ export function RightInspector({ onClose }: RightInspectorProps) {
               </button>
             </div>
 
-            <div className={`${subBoxClass} p-2 font-mono text-[11px] tabular-nums text-[#64748b] dark:text-slate-400`}>
+            <div className={`${subBoxClass} p-2 font-sans text-[11px] tabular-nums text-[#64748b] dark:text-slate-400`}>
               BBox: {formatDim(comp.widthMm, displayUnit)} ×{" "}
               {formatDim(comp.heightMm, displayUnit)} ×{" "}
               {formatDim(comp.depthMm, displayUnit)}
@@ -858,14 +874,14 @@ export function RightInspector({ onClose }: RightInspectorProps) {
           </div>
 
           <div className={`${cardClass} space-y-2`}>
-            <div className="font-mono text-xs font-semibold uppercase tracking-wider text-[#64748b] dark:text-slate-400">
+            <div className="font-sans text-xs font-semibold uppercase tracking-wider text-[#64748b] dark:text-slate-400">
               Pin Terminals ({comp.pins.length})
             </div>
             <div className="max-h-56 space-y-1 overflow-y-auto">
               {comp.pins.map((pin) => (
                 <div
                   key={pin.id}
-                  className={`flex items-center justify-between gap-1.5 ${subBoxClass} px-2 py-1 font-mono text-[11px] tabular-nums`}
+                  className={`flex items-center justify-between gap-1.5 ${subBoxClass} px-2 py-1 font-sans text-[11px] tabular-nums`}
                 >
                   <input
                     type="text"
@@ -925,7 +941,7 @@ export function RightInspector({ onClose }: RightInspectorProps) {
               type="text"
               value={cad.name}
               onChange={(e) => updateCadAsset(cad.id, { name: e.target.value })}
-              className="font-semibold text-[13px] text-[#0f172a] dark:text-white bg-transparent border-b border-transparent hover:border-[#cbd5e1] focus:border-sky-500 focus:outline-none px-0.5"
+              className="font-semibold text-xs text-[#0f172a] dark:text-white bg-transparent border-b border-transparent hover:border-[#cbd5e1] focus:border-sky-500 focus:outline-none px-0.5"
             />
             <div className="flex items-center gap-1">
               <button
@@ -979,7 +995,7 @@ export function RightInspector({ onClose }: RightInspectorProps) {
             </div>
           </div>
 
-          <div className={`${subBoxClass} p-2 font-mono text-[11px] tabular-nums text-[#64748b] dark:text-slate-400 space-y-0.5`}>
+          <div className={`${subBoxClass} p-2 font-sans text-[11px] tabular-nums text-[#64748b] dark:text-slate-400 space-y-0.5`}>
             <div>
               Normalized BBox: {formatDim(cad.boundingBoxMm.w, displayUnit)} ×{" "}
               {formatDim(cad.boundingBoxMm.h, displayUnit)} ×{" "}
@@ -1047,7 +1063,7 @@ export function RightInspector({ onClose }: RightInspectorProps) {
           {/* Physical Dimensions (W x H x D) with optional Aspect Ratio Lock */}
           <div className="space-y-2 border-t border-[#e2e8f0] dark:border-white/10 pt-2.5">
             <div className="flex items-center justify-between">
-              <span className="font-mono text-[11px] font-semibold uppercase tracking-wider text-[#64748b] dark:text-slate-400">
+              <span className="font-sans text-[11px] font-semibold uppercase tracking-wider text-[#64748b] dark:text-slate-400">
                 Dimensions ({displayUnit})
               </span>
               <button
@@ -1146,15 +1162,15 @@ export function RightInspector({ onClose }: RightInspectorProps) {
           {/* Non-Destructive CAD Crop / Trim */}
           <div className="space-y-2 border-t border-[#e2e8f0] dark:border-white/10 pt-2.5">
             <div className="flex items-center justify-between">
-              <span className="flex items-center gap-1.5 font-mono text-[11px] font-semibold uppercase tracking-wider text-[#64748b] dark:text-slate-400">
-                <Crop className="h-3.5 w-3.5 text-sky-500" />
+              <span className="flex items-center gap-1.5 font-sans text-[11px] font-semibold uppercase tracking-wider text-[#64748b] dark:text-slate-400">
+                <Crop className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />
                 CAD Crop / Trim ({displayUnit})
               </span>
               <button
                 type="button"
                 disabled={!hasCrop}
                 onClick={() => updateCadAsset(cad.id, { cropMm: undefined })}
-                className={`flex items-center gap-1 rounded px-1.5 py-0.5 font-mono text-[10px] transition-colors ${
+                className={`flex items-center gap-1 rounded px-1.5 py-0.5 font-sans text-[10px] transition-colors ${
                   hasCrop
                     ? "text-sky-600 dark:text-sky-400 hover:bg-sky-500/10"
                     : "text-[#94a3b8] dark:text-slate-600 cursor-not-allowed"
@@ -1191,7 +1207,7 @@ export function RightInspector({ onClose }: RightInspectorProps) {
             </div>
 
             <div className="flex items-center gap-1 pt-0.5">
-              <span className="font-mono text-[10px] text-[#94a3b8] dark:text-slate-500 mr-1">
+              <span className="font-sans text-[10px] text-[#94a3b8] dark:text-slate-500 mr-1">
                 Top preset:
               </span>
               {[10, 15, 20].map((presetMm) => (
@@ -1203,7 +1219,7 @@ export function RightInspector({ onClose }: RightInspectorProps) {
                       cropMm: { ...crop, top: presetMm },
                     })
                   }
-                  className={`rounded border px-1.5 py-0.5 font-mono text-[10px] transition-colors ${
+                  className={`rounded border px-1.5 py-0.5 font-sans text-[10px] transition-colors ${
                     Math.abs(crop.top - presetMm) < 0.01
                       ? "border-sky-500 bg-sky-500/10 text-sky-600 dark:text-sky-400 font-semibold"
                       : "border-[#e2e8f0] dark:border-white/10 text-[#64748b] dark:text-slate-400 hover:border-sky-400"
@@ -1234,7 +1250,7 @@ export function RightInspector({ onClose }: RightInspectorProps) {
               <div className="space-y-1">
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-[#64748b] dark:text-slate-400">Image Opacity</span>
-                  <span className="font-mono text-sky-600 dark:text-sky-400">
+                  <span className="font-sans text-sky-600 dark:text-sky-400">
                     {Math.round((cad.imageOpacity ?? 1.0) * 100)}%
                   </span>
                 </div>
@@ -1398,7 +1414,7 @@ export function RightInspector({ onClose }: RightInspectorProps) {
                 cad.id
               )
             }
-            className={`flex w-full items-center justify-center gap-1.5 rounded-lg px-2.5 py-2 font-mono text-xs font-medium transition-colors ${
+            className={`flex w-full items-center justify-center gap-1.5 rounded-lg px-2.5 py-2 font-sans text-xs font-medium transition-colors ${
               isPinMarkingMode && activeMarkingAssetId === cad.id
                 ? "bg-amber-500 text-black font-semibold"
                 : "border border-[#e2e8f0] dark:border-white/10 bg-[#f8fafc] dark:bg-[#090b10] text-[#0f172a] dark:text-slate-200 hover:border-[#cbd5e1] dark:hover:border-white/25"
@@ -1411,13 +1427,13 @@ export function RightInspector({ onClose }: RightInspectorProps) {
           </button>
 
           <div className="space-y-1.5 border-t border-[#e2e8f0] dark:border-white/10 pt-2">
-            <div className="font-mono text-xs font-semibold uppercase text-[#64748b] dark:text-slate-400">
+            <div className="font-sans text-xs font-semibold uppercase text-[#64748b] dark:text-slate-400">
               Marked Pins ({cad.pins.length})
             </div>
             {cad.pins.map((pin) => (
               <div
                 key={pin.id}
-                className={`flex items-center justify-between gap-1.5 ${subBoxClass} px-2 py-1 font-mono text-[11px] tabular-nums`}
+                className={`flex items-center justify-between gap-1.5 ${subBoxClass} px-2 py-1 font-sans text-[11px] tabular-nums`}
               >
                 <input
                   type="text"
@@ -1461,6 +1477,5 @@ export function RightInspector({ onClose }: RightInspectorProps) {
         </div>
       )}
     </aside>
-    </>
   );
 }
