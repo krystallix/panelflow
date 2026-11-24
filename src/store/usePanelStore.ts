@@ -407,7 +407,10 @@ interface PanelStore {
   inspectorFocusNonce: number;
   inspectorOpen: boolean;
   leftSidebarOpen: boolean;
+  rightInspectorOpen: boolean;
   rightPanelTab: RightPanelTab;
+  setRightInspectorOpen: (open: boolean) => void;
+  toggleRightInspector: () => void;
 
   // History Stack
   undo: () => void;
@@ -421,6 +424,7 @@ interface PanelStore {
   renameSheet: (sheetId: string, newName: string) => void;
   duplicateSheet: (sheetId: string) => string | null;
   deleteSheet: (sheetId: string) => boolean;
+  reorderSheets: (fromIndex: number, toIndex: number) => void;
 
   // Inspector & Toolbar Focus
   setTheme: (theme: ThemeMode) => void;
@@ -532,7 +536,11 @@ interface PanelStore {
 
   // CAD Asset Actions
   addCadAsset: (asset: CustomCadAsset) => void;
-  updateCadAsset: (id: string, partial: Partial<CustomCadAsset>) => void;
+  updateCadAsset: (
+    id: string,
+    partial: Partial<CustomCadAsset>,
+    options?: { skipHistory?: boolean }
+  ) => void;
   moveCadAsset: (
     id: string,
     targetXMm: number,
@@ -637,12 +645,19 @@ function recomputeBoundWires(
       w.fromComponentId,
       w.fromPinId
     );
-    const p2 = resolvePinExitInfo(
-      sheet.components,
-      sheet.cadAssets,
-      w.toComponentId,
-      w.toPinId
-    );
+    const p2 = w.toFreePoint
+      ? {
+          xMm: w.toFreePoint.xMm,
+          yMm: w.toFreePoint.yMm,
+          exitDir: undefined,
+          stubPt: undefined,
+        }
+      : resolvePinExitInfo(
+          sheet.components,
+          sheet.cadAssets,
+          w.toComponentId,
+          w.toPinId
+        );
     if (!p1 || !p2) return w;
 
     changed = true;
@@ -737,6 +752,7 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
   inspectorFocusNonce: 0,
   inspectorOpen: true,
   leftSidebarOpen: true,
+  rightInspectorOpen: false,
   rightPanelTab: "inspector",
   canUndo: false,
   canRedo: false,
@@ -986,6 +1002,28 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
     return true;
   },
 
+  reorderSheets: (fromIndex: number, toIndex: number) => {
+    const { sheets } = get();
+    if (
+      fromIndex < 0 ||
+      toIndex < 0 ||
+      fromIndex >= sheets.length ||
+      toIndex >= sheets.length ||
+      fromIndex === toIndex
+    ) {
+      return;
+    }
+    pushHistory(sheets);
+    const updated = [...sheets];
+    const [moved] = updated.splice(fromIndex, 1);
+    updated.splice(toIndex, 0, moved);
+    set({
+      sheets: updated,
+      canUndo: true,
+      canRedo: false,
+    });
+  },
+
   setTheme: (theme) => {
     applyThemeToDom(theme);
     set({ theme });
@@ -995,13 +1033,17 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
     applyThemeToDom(next);
     set({ theme: next });
   },
-  setInspectorOpen: (open) => set({ inspectorOpen: open }),
+  setInspectorOpen: (open) => set({ inspectorOpen: open, rightInspectorOpen: open }),
   setLeftSidebarOpen: (open) => set({ leftSidebarOpen: open }),
   toggleLeftSidebar: () => set((s) => ({ leftSidebarOpen: !s.leftSidebarOpen })),
-  setRightPanelTab: (tab) => set({ rightPanelTab: tab }),
+  setRightInspectorOpen: (open) => set({ rightInspectorOpen: open }),
+  toggleRightInspector: () =>
+    set((s) => ({ rightInspectorOpen: !s.rightInspectorOpen })),
+  setRightPanelTab: (tab) => set({ rightPanelTab: tab, rightInspectorOpen: true }),
   requestInspectorFocus: () =>
     set((state) => ({
       inspectorOpen: true,
+      rightInspectorOpen: true,
       rightPanelTab: "inspector",
       inspectorFocusNonce: state.inspectorFocusNonce + 1,
     })),
@@ -1091,7 +1133,7 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
 
     const movedRailDeltas = new Map<string, { dx: number; dy: number; rail: DinRail }>();
     const nextRails = activeSheet.rails.map((r) => {
-      if (!railIds.has(r.id)) return r;
+      if (!railIds.has(r.id) || r.locked) return r;
       const clamped = clampToBackplate(r.xMm + dxMm, r.yMm + dyMm, r.lengthMm, DIN_RAIL_HEIGHT_MM, plateW, plateH);
       const movedRail = {
         ...r,
@@ -1139,7 +1181,7 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
     });
 
     const nextDucts = activeSheet.ducts.map((d) => {
-      if (!ductIds.has(d.id)) return d;
+      if (!ductIds.has(d.id) || d.locked) return d;
       const clamped = clampToBackplate(d.xMm + dxMm, d.yMm + dyMm, d.widthMm, d.heightMm, plateW, plateH);
       return {
         ...d,
@@ -1421,7 +1463,11 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
   groupSelectedItems: () => {
     const { sheets, activeSheetId, selectedIds } = get();
     const groupable = selectedIds.filter(
-      (s) => s.kind === "component" || s.kind === "cad"
+      (s) =>
+        s.kind === "component" ||
+        s.kind === "cad" ||
+        s.kind === "rail" ||
+        s.kind === "duct"
     );
     if (groupable.length < 2) return null;
 
@@ -1430,6 +1476,12 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
     );
     const cadIds = new Set(
       groupable.filter((s) => s.kind === "cad").map((s) => s.id)
+    );
+    const railIds = new Set(
+      groupable.filter((s) => s.kind === "rail").map((s) => s.id)
+    );
+    const ductIds = new Set(
+      groupable.filter((s) => s.kind === "duct").map((s) => s.id)
     );
     const groupId = makeUid("grp");
 
@@ -1443,6 +1495,12 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
             ),
             cadAssets: s.cadAssets.map((a) =>
               cadIds.has(a.id) ? { ...a, groupId } : a
+            ),
+            rails: s.rails.map((r) =>
+              railIds.has(r.id) ? { ...r, groupId } : r
+            ),
+            ducts: s.ducts.map((d) =>
+              ductIds.has(d.id) ? { ...d, groupId } : d
             ),
           }
         : s
@@ -1469,6 +1527,12 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
     const cadIds = new Set(
       effectiveIds.filter((s) => s.kind === "cad").map((s) => s.id)
     );
+    const railIds = new Set(
+      effectiveIds.filter((s) => s.kind === "rail").map((s) => s.id)
+    );
+    const ductIds = new Set(
+      effectiveIds.filter((s) => s.kind === "duct").map((s) => s.id)
+    );
 
     const targetGroupIds = new Set<string>();
     for (const c of activeSheet.components) {
@@ -1476,6 +1540,12 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
     }
     for (const a of activeSheet.cadAssets) {
       if (cadIds.has(a.id) && a.groupId) targetGroupIds.add(a.groupId);
+    }
+    for (const r of activeSheet.rails) {
+      if (railIds.has(r.id) && r.groupId) targetGroupIds.add(r.groupId);
+    }
+    for (const d of activeSheet.ducts) {
+      if (ductIds.has(d.id) && d.groupId) targetGroupIds.add(d.groupId);
     }
     if (targetGroupIds.size === 0) return;
 
@@ -1493,6 +1563,16 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
               a.groupId && targetGroupIds.has(a.groupId)
                 ? { ...a, groupId: undefined }
                 : a
+            ),
+            rails: s.rails.map((r) =>
+              r.groupId && targetGroupIds.has(r.groupId)
+                ? { ...r, groupId: undefined }
+                : r
+            ),
+            ducts: s.ducts.map((d) =>
+              d.groupId && targetGroupIds.has(d.groupId)
+                ? { ...d, groupId: undefined }
+                : d
             ),
           }
         : s
@@ -1520,6 +1600,12 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
             cadAssets: s.cadAssets.map((a) =>
               a.groupId === groupId ? { ...a, groupName: cleanName || undefined } : a
             ),
+            rails: s.rails.map((r) =>
+              r.groupId === groupId ? { ...r, groupName: cleanName || undefined } : r
+            ),
+            ducts: s.ducts.map((d) =>
+              d.groupId === groupId ? { ...d, groupName: cleanName || undefined } : d
+            ),
           }
         : s
     );
@@ -1544,13 +1630,30 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
     const cadIds = new Set(
       effectiveIds.filter((s) => s.kind === "cad").map((s) => s.id)
     );
-    if (compIds.size === 0 && cadIds.size === 0) return;
+    const railIds = new Set(
+      effectiveIds.filter((s) => s.kind === "rail").map((s) => s.id)
+    );
+    const ductIds = new Set(
+      effectiveIds.filter((s) => s.kind === "duct").map((s) => s.id)
+    );
+    if (
+      compIds.size === 0 &&
+      cadIds.size === 0 &&
+      railIds.size === 0 &&
+      ductIds.size === 0
+    ) {
+      return;
+    }
 
     const selectedComps = activeSheet.components.filter((c) => compIds.has(c.id));
     const selectedCads = activeSheet.cadAssets.filter((a) => cadIds.has(a.id));
+    const selectedRails = activeSheet.rails.filter((r) => railIds.has(r.id));
+    const selectedDucts = activeSheet.ducts.filter((d) => ductIds.has(d.id));
     const allCurrentlyLocked =
       selectedComps.every((c) => Boolean(c.locked)) &&
-      selectedCads.every((a) => Boolean(a.locked));
+      selectedCads.every((a) => Boolean(a.locked)) &&
+      selectedRails.every((r) => Boolean(r.locked)) &&
+      selectedDucts.every((d) => Boolean(d.locked));
     const nextLocked = forceLocked !== undefined ? forceLocked : !allCurrentlyLocked;
 
     pushHistory(sheets);
@@ -1563,6 +1666,12 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
             ),
             cadAssets: s.cadAssets.map((a) =>
               cadIds.has(a.id) ? { ...a, locked: nextLocked } : a
+            ),
+            rails: s.rails.map((r) =>
+              railIds.has(r.id) ? { ...r, locked: nextLocked } : r
+            ),
+            ducts: s.ducts.map((d) =>
+              ductIds.has(d.id) ? { ...d, locked: nextLocked } : d
             ),
           }
         : s
@@ -1579,15 +1688,47 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
   deleteSelectedItems: () => {
     const { sheets, activeSheetId, selectedIds } = get();
     if (selectedIds.length === 0) return;
-    pushHistory(sheets);
     const activeSheet = sheets.find((s) => s.id === activeSheetId);
     if (!activeSheet) return;
 
-    const compIds = new Set(selectedIds.filter((s) => s.kind === "component").map((s) => s.id));
-    const cadIds = new Set(selectedIds.filter((s) => s.kind === "cad").map((s) => s.id));
-    const railIds = new Set(selectedIds.filter((s) => s.kind === "rail").map((s) => s.id));
-    const ductIds = new Set(selectedIds.filter((s) => s.kind === "duct").map((s) => s.id));
+    // Never delete locked items
+    const compIds = new Set(
+      selectedIds
+        .filter((s) => s.kind === "component")
+        .map((s) => s.id)
+        .filter((id) => !activeSheet.components.find((c) => c.id === id)?.locked)
+    );
+    const cadIds = new Set(
+      selectedIds
+        .filter((s) => s.kind === "cad")
+        .map((s) => s.id)
+        .filter((id) => !activeSheet.cadAssets.find((a) => a.id === id)?.locked)
+    );
+    const railIds = new Set(
+      selectedIds
+        .filter((s) => s.kind === "rail")
+        .map((s) => s.id)
+        .filter((id) => !activeSheet.rails.find((r) => r.id === id)?.locked)
+    );
+    const ductIds = new Set(
+      selectedIds
+        .filter((s) => s.kind === "duct")
+        .map((s) => s.id)
+        .filter((id) => !activeSheet.ducts.find((d) => d.id === id)?.locked)
+    );
     const wireIds = new Set(selectedIds.filter((s) => s.kind === "wire").map((s) => s.id));
+
+    if (
+      compIds.size === 0 &&
+      cadIds.size === 0 &&
+      railIds.size === 0 &&
+      ductIds.size === 0 &&
+      wireIds.size === 0
+    ) {
+      return;
+    }
+
+    pushHistory(sheets);
 
     const nextComponents = activeSheet.components
       .filter((c) => !compIds.has(c.id))
@@ -1856,12 +1997,19 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
         wire.fromComponentId,
         wire.fromPinId
       );
-      const p2 = resolvePinExitInfo(
-        activeSheet.components,
-        activeSheet.cadAssets,
-        wire.toComponentId,
-        wire.toPinId
-      );
+      const p2 = wire.toFreePoint
+        ? {
+            xMm: wire.toFreePoint.xMm,
+            yMm: wire.toFreePoint.yMm,
+            exitDir: undefined,
+            stubPt: undefined,
+          }
+        : resolvePinExitInfo(
+            activeSheet.components,
+            activeSheet.cadAssets,
+            wire.toComponentId,
+            wire.toPinId
+          );
       if (p1 && p2) {
         const obstacles = buildComponentObstacles(
           activeSheet.components,
@@ -2167,6 +2315,7 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
     const activeSheet = sheets.find((s) => s.id === activeSheetId);
     const prevRail = activeSheet?.rails.find((r) => r.id === id);
     if (!activeSheet || !prevRail) return;
+    if (prevRail.locked && partial.locked !== false) return;
 
     const nextRail: DinRail = { ...prevRail, ...partial };
     const dx = nextRail.xMm - prevRail.xMm;
@@ -2177,30 +2326,70 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
       pushHistory(sheets);
     }
 
+    const groupId = prevRail.groupId;
     const movedCompIds = new Set<string>();
     const updated = sheets.map((s) => {
       if (s.id !== activeSheetId) return s;
 
-      const nextRails = s.rails.map((r) => (r.id === id ? nextRail : r));
+      const nextRails = s.rails.map((r) => {
+        if (r.id === id) return nextRail;
+        if (groupId && r.groupId === groupId && !r.locked && (dx !== 0 || dy !== 0)) {
+          return { ...r, xMm: r.xMm + dx, yMm: r.yMm + dy };
+        }
+        return r;
+      });
+      const nextDucts =
+        groupId && (dx !== 0 || dy !== 0)
+          ? s.ducts.map((d) =>
+              d.groupId === groupId && !d.locked
+                ? { ...d, xMm: d.xMm + dx, yMm: d.yMm + dy }
+                : d
+            )
+          : s.ducts;
+      const nextCadAssets =
+        groupId && (dx !== 0 || dy !== 0)
+          ? s.cadAssets.map((a) => {
+              if (a.groupId === groupId && !a.locked) {
+                movedCompIds.add(a.id);
+                return { ...a, xMm: a.xMm + dx, yMm: a.yMm + dy };
+              }
+              return a;
+            })
+          : s.cadAssets;
+
       if (dx === 0 && dy === 0 && !lengthChanged) {
         return { ...s, rails: nextRails };
       }
 
-      // Move all components bound to this DIN rail (and clamp inside new rail length)
+      const movedRailIds = new Set<string>([id]);
+      if (groupId) {
+        for (const r of s.rails) {
+          if (r.groupId === groupId && !r.locked) movedRailIds.add(r.id);
+        }
+      }
+
+      // Move all components bound to moved rail(s) or in the same group
       const movedDirect = s.components.map((c) => {
-        if (c.railId !== id) return c;
-        const dims = getRotatedDimensions(c.widthMm, c.heightMm, c.rotationDeg ?? 0);
-        const minX = nextRail.xMm - nextRail.lengthMm / 2 + dims.widthMm / 2;
-        const maxX = nextRail.xMm + nextRail.lengthMm / 2 - dims.widthMm / 2;
-        const rawX = c.xMm + dx;
-        const nextX =
-          minX <= maxX ? Math.max(minX, Math.min(maxX, rawX)) : nextRail.xMm;
-        movedCompIds.add(c.id);
-        return {
-          ...c,
-          xMm: nextX,
-          yMm: nextRail.yMm,
-        };
+        if (c.railId && movedRailIds.has(c.railId)) {
+          const targetRail = nextRails.find((r) => r.id === c.railId) ?? nextRail;
+          const dims = getRotatedDimensions(c.widthMm, c.heightMm, c.rotationDeg ?? 0);
+          const minX = targetRail.xMm - targetRail.lengthMm / 2 + dims.widthMm / 2;
+          const maxX = targetRail.xMm + targetRail.lengthMm / 2 - dims.widthMm / 2;
+          const rawX = c.xMm + dx;
+          const nextX =
+            minX <= maxX ? Math.max(minX, Math.min(maxX, rawX)) : targetRail.xMm;
+          movedCompIds.add(c.id);
+          return {
+            ...c,
+            xMm: nextX,
+            yMm: targetRail.yMm,
+          };
+        }
+        if (groupId && c.groupId === groupId && !c.locked && (dx !== 0 || dy !== 0)) {
+          movedCompIds.add(c.id);
+          return { ...c, xMm: c.xMm + dx, yMm: c.yMm + dy };
+        }
+        return c;
       });
 
       // Also move child components mounted to parents on this rail (e.g., TOR under Contactor)
@@ -2223,6 +2412,8 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
         {
           ...s,
           rails: nextRails,
+          ducts: nextDucts,
+          cadAssets: nextCadAssets,
           components: nextComponents,
         },
         autoRouteDuctsEnabled,
@@ -2240,6 +2431,8 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
 
   removeRail: (id) => {
     const { sheets, activeSheetId, selected, selectedIds } = get();
+    const activeSheet = sheets.find((s) => s.id === activeSheetId);
+    if (activeSheet?.rails.find((r) => r.id === id)?.locked) return;
     pushHistory(sheets);
     const updated = sheets.map((s) =>
       s.id === activeSheetId
@@ -2341,18 +2534,63 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
   },
 
   updateDuct: (id, partial, options) => {
-    const { sheets, activeSheetId } = get();
+    const { sheets, activeSheetId, autoRouteDuctsEnabled } = get();
+    const activeSheet = sheets.find((s) => s.id === activeSheetId);
+    const prevDuct = activeSheet?.ducts.find((d) => d.id === id);
+    if (!activeSheet || !prevDuct) return;
+    if (prevDuct.locked && partial.locked !== false) return;
+
+    const nextDuct: WireDuct = { ...prevDuct, ...partial };
+    const dx = nextDuct.xMm - prevDuct.xMm;
+    const dy = nextDuct.yMm - prevDuct.yMm;
+
     if (!options?.skipHistory) {
       pushHistory(sheets);
     }
-    const updated = sheets.map((s) =>
-      s.id === activeSheetId
-        ? {
-            ...s,
-            ducts: s.ducts.map((d) => (d.id === id ? { ...d, ...partial } : d)),
-          }
-        : s
-    );
+
+    const groupId = prevDuct.groupId;
+    const updated = sheets.map((s) => {
+      if (s.id !== activeSheetId) return s;
+      const nextDucts = s.ducts.map((d) => {
+        if (d.id === id) return nextDuct;
+        if (groupId && d.groupId === groupId && !d.locked && (dx !== 0 || dy !== 0)) {
+          return { ...d, xMm: d.xMm + dx, yMm: d.yMm + dy };
+        }
+        return d;
+      });
+      if (!groupId || (dx === 0 && dy === 0)) {
+        return { ...s, ducts: nextDucts };
+      }
+      const movedIds = new Set<string>();
+      const nextRails = s.rails.map((r) =>
+        r.groupId === groupId && !r.locked ? { ...r, xMm: r.xMm + dx, yMm: r.yMm + dy } : r
+      );
+      const nextCadAssets = s.cadAssets.map((a) => {
+        if (a.groupId === groupId && !a.locked) {
+          movedIds.add(a.id);
+          return { ...a, xMm: a.xMm + dx, yMm: a.yMm + dy };
+        }
+        return a;
+      });
+      const nextComponents = s.components.map((c) => {
+        if (c.groupId === groupId && !c.locked) {
+          movedIds.add(c.id);
+          return { ...c, xMm: c.xMm + dx, yMm: c.yMm + dy };
+        }
+        return c;
+      });
+      return recomputeBoundWires(
+        {
+          ...s,
+          ducts: nextDucts,
+          rails: nextRails,
+          cadAssets: nextCadAssets,
+          components: nextComponents,
+        },
+        autoRouteDuctsEnabled,
+        movedIds.size > 0 ? movedIds : null
+      );
+    });
     const active = updated.find((s) => s.id === activeSheetId)!;
     set({
       sheets: updated,
@@ -2363,6 +2601,8 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
 
   removeDuct: (id) => {
     const { sheets, activeSheetId, selected, selectedIds } = get();
+    const activeSheet = sheets.find((s) => s.id === activeSheetId);
+    if (activeSheet?.ducts.find((d) => d.id === id)?.locked) return;
     pushHistory(sheets);
     const updated = sheets.map((s) =>
       s.id === activeSheetId
@@ -3122,15 +3362,16 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
       plateConfig
     );
 
-    // Mounted TOR stays attached to a Contactor (can re-mount to another nearby Contactor)
-    if (comp.templateId === "tor" && comp.mountedToComponentId) {
+    // Mounted TOR stays attached to a compatible Contactor (can re-mount to another nearby Contactor)
+    if (comp.mountingType === "parent_mount" && comp.mountedToComponentId) {
+      const targetTemplates =
+        COMPONENT_CATALOG[comp.templateId]?.behavior?.mountTargetTemplateIds ?? ["contactor"];
       const availableContactors = activeSheet.components.filter(
         (c) =>
-          c.templateId === "contactor" &&
+          targetTemplates.includes(c.templateId) &&
           !activeSheet.components.some(
             (other) =>
               other.id !== comp.id &&
-              other.templateId === "tor" &&
               other.mountedToComponentId === c.id
           )
       );
@@ -3321,7 +3562,7 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
     const movedIds = new Set<string>([id]);
     for (const c of activeSheet.components) {
       if (
-        (c.templateId === "tor" && c.mountedToComponentId === id) ||
+        c.mountedToComponentId === id ||
         (comp.groupId && c.groupId === comp.groupId && !c.locked)
       ) {
         movedIds.add(c.id);
@@ -3348,7 +3589,7 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
                     railId: snapResult.railId,
                   };
                 }
-                if (c.templateId === "tor" && c.mountedToComponentId === id) {
+                if (c.mountedToComponentId === id) {
                   return {
                     ...c,
                     xMm: clamped.xMm,
@@ -3407,8 +3648,9 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
 
   removeComponent: (id) => {
     const { sheets, activeSheetId, selected, selectedIds } = get();
-    pushHistory(sheets);
     const activeSheet = sheets.find((s) => s.id === activeSheetId);
+    if (activeSheet?.components.find((c) => c.id === id)?.locked) return;
+    pushHistory(sheets);
     const removedIds = new Set<string>([id]);
     if (activeSheet) {
       for (const c of activeSheet.components) {
@@ -3588,22 +3830,36 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
     return newId;
   },
 
-  updateCadAsset: (id, partial) => {
-    const { sheets, activeSheetId } = get();
-    pushHistory(sheets);
-    const updated = sheets.map((s) =>
-      s.id === activeSheetId
-        ? {
-            ...s,
-            cadAssets: s.cadAssets.map((a) => (a.id === id ? { ...a, ...partial } : a)),
-          }
-        : s
-    );
+  updateCadAsset: (id, partial, options) => {
+    const { sheets, activeSheetId, autoRouteDuctsEnabled } = get();
+    const activeSheet = sheets.find((s) => s.id === activeSheetId);
+    const prevAsset = activeSheet?.cadAssets.find((a) => a.id === id);
+    if (!activeSheet || !prevAsset) return;
+    if (prevAsset.locked && partial.locked !== false) return;
+
+    if (!options?.skipHistory) {
+      pushHistory(sheets);
+    }
+    const updated = sheets.map((s) => {
+      if (s.id !== activeSheetId) return s;
+      const nextSheet = {
+        ...s,
+        cadAssets: s.cadAssets.map((a) => (a.id === id ? { ...a, ...partial } : a)),
+      };
+      if (
+        partial.xMm !== undefined ||
+        partial.yMm !== undefined ||
+        partial.boundingBoxMm !== undefined ||
+        partial.pins !== undefined
+      ) {
+        return recomputeBoundWires(nextSheet, autoRouteDuctsEnabled, new Set([id]));
+      }
+      return nextSheet;
+    });
     const active = updated.find((s) => s.id === activeSheetId)!;
     set({
       sheets: updated,
-      canUndo: true,
-      canRedo: false,
+      ...(options?.skipHistory ? {} : { canUndo: true, canRedo: false }),
       ...syncActiveSheetProjection(active),
     });
   },
@@ -3707,6 +3963,8 @@ export const usePanelStore = create<PanelStore>((set, get) => ({
 
   removeCadAsset: (id) => {
     const { sheets, activeSheetId, selected, isPinMarkingMode, activeMarkingAssetId } = get();
+    const activeSheet = sheets.find((s) => s.id === activeSheetId);
+    if (activeSheet?.cadAssets.find((a) => a.id === id)?.locked) return;
     pushHistory(sheets);
     const updated = sheets.map((s) =>
       s.id === activeSheetId

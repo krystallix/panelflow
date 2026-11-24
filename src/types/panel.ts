@@ -34,6 +34,9 @@ export interface DinRail {
   xMm: number;
   yMm: number;
   lengthMm: number;
+  groupId?: string;
+  groupName?: string;
+  locked?: boolean;
 }
 
 export interface WireDuct {
@@ -45,6 +48,9 @@ export interface WireDuct {
   heightMm: number;
   depthMm: number;
   orientation: "horizontal" | "vertical";
+  groupId?: string;
+  groupName?: string;
+  locked?: boolean;
 }
 
 export interface PinTerminal {
@@ -94,8 +100,10 @@ export type ComponentTemplateId =
   | "fuse-1p"
   | "contactor"
   | "tor"
-  | "relay"
-  | "timer-relay"
+  | "contactor-st10"
+  | "tor-tht18"
+  | "relay-socket-my4n"
+  | "relay-socket-mk3p"
   | "plc-compact"
   | "vfd-15kw"
   | "psu-24v"
@@ -266,6 +274,8 @@ export interface WireConnection {
   fromPinId: string;
   toComponentId: string;
   toPinId: string;
+  toFreePoint?: { xMm: number; yMm: number };
+  toFreeLabel?: string;
   waypoints?: Array<{ xMm: number; yMm: number }>;
 }
 

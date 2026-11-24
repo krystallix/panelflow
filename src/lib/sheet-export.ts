@@ -280,11 +280,13 @@ export function generatePanelFlowSheetSvg(params: PanelFlowSheetParams): string 
     })
     .join("\n");
 
-  // 5. Wires (Orthogonal routing lines with wire tag callouts)
+  // 5. Wires (Orthogonal routing lines with wire tag callouts & free-end terminals)
   const wireSvg = wires
     .map((w) => {
       const p1 = pinCoordMap.get(`${w.fromComponentId}:${w.fromPinId}`);
-      const p2 = pinCoordMap.get(`${w.toComponentId}:${w.toPinId}`);
+      const p2 = w.toFreePoint
+        ? { x: toSvgX(w.toFreePoint.xMm), y: toSvgY(w.toFreePoint.yMm) }
+        : pinCoordMap.get(`${w.toComponentId}:${w.toPinId}`);
       if (!p1 || !p2) return "";
 
       const waypoints =
@@ -296,16 +298,49 @@ export function generatePanelFlowSheetSvg(params: PanelFlowSheetParams): string 
       const wireDiameterMm = getWireOuterDiameterMm(w.gaugeMm2);
       const midIdx = Math.floor(waypoints.length / 2);
       const labelPos = waypoints[midIdx] || p1;
-
       const wireTag = `${w.label} (${w.gaugeMm2}mm²)`;
       const badgeW = Math.max(16, wireTag.length * 2.6 + 4);
       const badgeH = 7.5;
+
+      let freeEndSvg = "";
+      if (w.toFreePoint) {
+        const freeLabel = (w.toFreeLabel ?? "").trim();
+        const prevPt = waypoints.length >= 2 ? waypoints[waypoints.length - 2] : p1;
+        const dx = p2.x - prevPt.x;
+        const dy = p2.y - prevPt.y;
+        const horizontalEnd = Math.abs(dx) >= Math.abs(dy);
+        const pillW = Math.max(14, freeLabel.length * 2.45 + 6);
+        const pillH = 7.4;
+        const labelX = horizontalEnd
+          ? dx >= 0
+            ? p2.x + 5.5
+            : p2.x - 5.5 - pillW
+          : p2.x - pillW / 2;
+        const labelY = horizontalEnd
+          ? p2.y - pillH / 2
+          : dy >= 0
+            ? p2.y + 5.5
+            : p2.y - 5.5 - pillH;
+        const escapedLabel = freeLabel
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;");
+        freeEndSvg = `
+      <circle cx="${p2.x.toFixed(2)}" cy="${p2.y.toFixed(2)}" r="2.9" fill="#ffffff" stroke="${stroke}" stroke-width="1.35" />
+      <circle cx="${p2.x.toFixed(2)}" cy="${p2.y.toFixed(2)}" r="1.05" fill="${stroke}" />${
+        escapedLabel
+          ? `
+      <rect x="${labelX.toFixed(2)}" y="${labelY.toFixed(2)}" width="${pillW.toFixed(2)}" height="${pillH}" rx="1.8" fill="#ffffff" stroke="${stroke}" stroke-width="0.65" />
+      <text x="${(labelX + pillW / 2).toFixed(2)}" y="${(labelY + pillH / 2 + 1.2).toFixed(2)}" font-family="monospace" font-size="3.7" font-weight="bold" fill="#0f172a" text-anchor="middle">${escapedLabel}</text>`
+          : ""
+      }`;
+      }
 
       return `
     <g class="wire-net" data-id="${w.id}">
       <path d="${pathD}" fill="none" stroke="${stroke}" stroke-width="${wireDiameterMm.toFixed(2)}" stroke-linecap="round" stroke-linejoin="round" />
       <rect x="${(labelPos.x - badgeW / 2).toFixed(2)}" y="${(labelPos.y - badgeH / 2).toFixed(2)}" width="${badgeW.toFixed(2)}" height="${badgeH}" rx="1.5" fill="#ffffff" stroke="${stroke}" stroke-width="0.5" />
-      <text x="${labelPos.x.toFixed(2)}" y="${(labelPos.y + 1.2).toFixed(2)}" font-family="monospace" font-size="3.5" font-weight="bold" fill="#0f172a" text-anchor="middle">${wireTag}</text>
+      <text x="${labelPos.x.toFixed(2)}" y="${(labelPos.y + 1.2).toFixed(2)}" font-family="monospace" font-size="3.5" font-weight="bold" fill="#0f172a" text-anchor="middle">${wireTag}</text>${freeEndSvg}
     </g>`;
     })
     .join("\n");

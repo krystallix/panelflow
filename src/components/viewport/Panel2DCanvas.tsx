@@ -25,6 +25,8 @@ import {
 import { ContextMenu } from "@/components/ui/ContextMenu";
 import { SelectionFloatingBar } from "@/components/ui/SelectionFloatingBar";
 import { ComponentSvg2D } from "@/components/viewport/ComponentSvg2D";
+import { RailsDuctsLayer2D } from "@/components/viewport/RailsDuctsLayer2D";
+import { WiresLayer2D } from "@/components/viewport/WiresLayer2D";
 import {
   PANELFLOW_PART_DRAG_MIME,
   buildCadAssetFromLibraryItem,
@@ -78,6 +80,7 @@ import type {
   DinRail,
   GridSnapMm,
   PlacedComponent,
+  RotationDeg,
   SelectedTarget,
   WireColorCode,
   WireDuct,
@@ -177,6 +180,23 @@ type DragState =
       segIndex: number;
       orientation: "horizontal" | "vertical";
       waypoints: Array<{ xMm: number; yMm: number }>;
+    }
+  | {
+      type: "wire-free-end";
+      wireId: string;
+    }
+  | {
+      type: "cad-resize";
+      id: string;
+      handle: "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w";
+      initialXMm: number;
+      initialYMm: number;
+      initialW: number;
+      initialH: number;
+      initialD: number;
+      rotationDeg: number;
+      startWorldXMm: number;
+      startWorldYMm: number;
     };
 
 function Component2DSymbol({
@@ -403,17 +423,6 @@ function Component2DSymbol({
                 onPinClick(e, pin.id);
               }
             }}
-            onPointerUp={(e) => {
-              if (
-                e.button === 0 &&
-                activeWireStartPin &&
-                (activeWireStartPin.componentId !== comp.id ||
-                  activeWireStartPin.pinId !== pin.id)
-              ) {
-                e.stopPropagation();
-                onPinClick(e, pin.id);
-              }
-            }}
             onDoubleClick={(e) => {
               e.stopPropagation();
               e.preventDefault();
@@ -498,6 +507,7 @@ function CadAsset2DSymbol({
   onPinClick,
   onPinDoubleClick,
   onPinContextMenu,
+  onStartResize,
 }: {
   asset: CustomCadAsset;
   isSelected: boolean;
@@ -512,6 +522,10 @@ function CadAsset2DSymbol({
   onPinClick: (e: React.PointerEvent, pinId: string) => void;
   onPinDoubleClick?: (e: React.MouseEvent, pin: import("@/types/panel").PinTerminal, worldCoords: { xMm: number; yMm: number }) => void;
   onPinContextMenu?: (e: React.MouseEvent, pin: import("@/types/panel").PinTerminal, worldCoords: { xMm: number; yMm: number }) => void;
+  onStartResize?: (
+    e: React.PointerEvent,
+    handle: "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w"
+  ) => void;
 }) {
   const [hoveredPinId, setHoveredPinId] = useState<string | null>(null);
 
@@ -588,16 +602,16 @@ function CadAsset2DSymbol({
         </defs>
       )}
 
-      {/* Interactive Hitbox & Background (Supports Busbar/Material Presets) */}
+      {/* Interactive Hitbox & Background (Uniform Monochrome CAD Light Gray) */}
       {(() => {
-        const mat = asset.materialType ? MATERIAL_PRESETS[asset.materialType] : null;
-        const fill = mat ? mat.fillColor : (asset.format === "dxf" ? "#f0f9ff" : "#f8fafc");
+        const isShape = Boolean(asset.materialType || asset.drawShape);
+        const fill = isShape ? "#f1f5f9" : asset.format === "dxf" ? "#f0f9ff" : "#f8fafc";
         const strokeColor = isMarkingThis
           ? "#f59e0b"
           : isSelected
           ? "#0284c7"
-          : mat
-          ? mat.borderColor
+          : isShape
+          ? "#0f172a"
           : "#94a3b8";
 
         if (asset.drawShape === "circle") {
@@ -608,26 +622,41 @@ function CadAsset2DSymbol({
               rx={effW / 2}
               ry={effH / 2}
               fill={fill}
-              fillOpacity={asset.imageOverlayUrl ? 0.0 : (mat ? 0.88 : (asset.format === "dxf" ? 0.35 : 0.85))}
+              fillOpacity={asset.imageOverlayUrl ? 0.0 : isShape ? 0.96 : asset.format === "dxf" ? 0.35 : 0.85}
               stroke={strokeColor}
-              strokeWidth={isMarkingThis || isSelected ? 1.1 : 0.75}
+              strokeWidth={isMarkingThis || isSelected ? 1.1 : 0.85}
             />
           );
         }
 
         return (
-          <rect
-            x={effX}
-            y={effY}
-            width={effW}
-            height={effH}
-            fill={fill}
-            fillOpacity={asset.imageOverlayUrl ? 0.0 : (mat ? 0.88 : (asset.format === "dxf" ? 0.35 : 0.85))}
-            stroke={strokeColor}
-            strokeWidth={isMarkingThis || isSelected ? 1.1 : 0.75}
-            strokeDasharray={asset.imageOverlayUrl || mat ? undefined : (asset.format === "dxf" ? "2,1.5" : undefined)}
-            rx={mat ? 1.5 : 0}
-          />
+          <g>
+            <rect
+              x={effX}
+              y={effY}
+              width={effW}
+              height={effH}
+              fill={fill}
+              fillOpacity={asset.imageOverlayUrl ? 0.0 : isShape ? 0.96 : asset.format === "dxf" ? 0.35 : 0.85}
+              stroke={strokeColor}
+              strokeWidth={isMarkingThis || isSelected ? 1.1 : 0.85}
+              strokeDasharray={asset.imageOverlayUrl || isShape ? undefined : asset.format === "dxf" ? "2,1.5" : undefined}
+              rx={isShape ? 1.2 : 0}
+            />
+            {isShape && !asset.imageOverlayUrl && effW >= 12 && effH >= 12 && (
+              <rect
+                x={effX + 1}
+                y={effY + 1}
+                width={effW - 2}
+                height={effH - 2}
+                rx={0.7}
+                fill="none"
+                stroke="#cbd5e1"
+                strokeWidth={0.4}
+                pointerEvents="none"
+              />
+            )}
+          </g>
         );
       })()}
 
@@ -660,7 +689,56 @@ function CadAsset2DSymbol({
           strokeOpacity={0.85}
           strokeDasharray="2,1.5"
           rx={1}
+          pointerEvents="none"
         />
+      )}
+
+      {/* Vector-Editor 8-Handle Direct Resize Controls (4 Corners + 4 Edges) */}
+      {isSelected && !isMarkingThis && !asset.locked && !isWireMode && !activeWireStartPin && onStartResize && (
+        <g>
+          {(
+            [
+              { id: "nw", hx: effX, hy: effY, cursor: "cursor-nwse-resize" },
+              { id: "n", hx: effX + effW / 2, hy: effY, cursor: "cursor-ns-resize" },
+              { id: "ne", hx: effX + effW, hy: effY, cursor: "cursor-nesw-resize" },
+              { id: "e", hx: effX + effW, hy: effY + effH / 2, cursor: "cursor-ew-resize" },
+              { id: "se", hx: effX + effW, hy: effY + effH, cursor: "cursor-nwse-resize" },
+              { id: "s", hx: effX + effW / 2, hy: effY + effH, cursor: "cursor-ns-resize" },
+              { id: "sw", hx: effX, hy: effY + effH, cursor: "cursor-nesw-resize" },
+              { id: "w", hx: effX, hy: effY + effH / 2, cursor: "cursor-ew-resize" },
+            ] as const
+          ).map((h) => (
+            <g
+              key={`cad-rh-${h.id}`}
+              className={h.cursor}
+              onPointerDown={(e) => {
+                if (e.button !== 0) return;
+                e.stopPropagation();
+                onStartResize(e, h.id);
+              }}
+            >
+              <rect
+                x={h.hx - 4}
+                y={h.hy - 4}
+                width={8}
+                height={8}
+                fill="transparent"
+                pointerEvents="all"
+              />
+              <rect
+                x={h.hx - 2.1}
+                y={h.hy - 2.1}
+                width={4.2}
+                height={4.2}
+                rx={0.8}
+                fill="#ffffff"
+                stroke="#0284c7"
+                strokeWidth={0.85}
+                pointerEvents="none"
+              />
+            </g>
+          ))}
+        </g>
       )}
 
       {/* Locked / Group Badge */}
@@ -742,24 +820,7 @@ function CadAsset2DSymbol({
         </text>
       </g>
 
-      {/* Busbar / Drawn Part Label */}
-      {!asset.imageOverlayUrl && (asset.materialType || asset.format === "dxf") && (
-        <text
-          x={effX + effW / 2}
-          y={effY + effH / 2}
-          textAnchor="middle"
-          dominantBaseline="middle"
-          fontSize={Math.min(9, Math.max(5, effH * 0.35))}
-          fontFamily="monospace"
-          fontWeight="bold"
-          fill={asset.materialType === "copper" ? "#78350f" : "#1e293b"}
-          className="pointer-events-none select-none opacity-80"
-        >
-          {asset.name}
-        </text>
-      )}
-
-      {/* 100% Transparent Crosshair Pin Markers (Outside clipPath, with text halo) */}
+      {/* Screw Terminal Pin Markers (Matching Contactor / Standard Component Pins) */}
       <g className="cad-pin-markers">
         {asset.pins.map((pin) => {
           const px = asset.xMm + pin.localXMm;
@@ -768,18 +829,8 @@ function CadAsset2DSymbol({
             activeWireStartPin?.componentId === asset.id &&
             activeWireStartPin?.pinId === pin.id;
           const isHovered = hoveredPinId === pin.id;
-          const isActivePin =
-            isWireMode || isMarkingThis || isHovered || isStartPin;
-
-          const ringStroke = isStartPin
-            ? "#b45309"
-            : isWireMode
-            ? "#0284c7"
-            : isHovered
-            ? "#f59e0b"
-            : isMarkingThis
-            ? "#d97706"
-            : "#0284c7";
+          const isWiringActive = isWireMode || Boolean(activeWireStartPin);
+          const screwR = 2.0;
 
           return (
             <g
@@ -794,86 +845,102 @@ function CadAsset2DSymbol({
                   onPinClick(e, pin.id);
                 }
               }}
-              onPointerUp={(e) => {
-                if (
-                  e.button === 0 &&
-                  !isMarkingThis &&
-                  activeWireStartPin &&
-                  (activeWireStartPin.componentId !== asset.id ||
-                    activeWireStartPin.pinId !== pin.id)
-                ) {
-                  e.stopPropagation();
-                  onPinClick(e, pin.id);
-                }
-              }}
               onDoubleClick={(e) => {
                 e.stopPropagation();
                 e.preventDefault();
                 onPinDoubleClick?.(e, pin, { xMm: px, yMm: asset.yMm + pin.localYMm });
               }}
               onContextMenu={(e) => {
-                if (isWireMode || isMarkingThis) {
+                if (isWiringActive || canQuickWire || isMarkingThis) {
                   e.stopPropagation();
                   e.preventDefault();
                   onPinContextMenu?.(e, pin, { xMm: px, yMm: asset.yMm + pin.localYMm });
                 }
               }}
-              className="cursor-pointer"
+              className="cursor-crosshair"
             >
-              {/* True 100% transparent hit ring with thin stroke */}
+              {/* Screw Terminal Visual (identical to Contactor / MCB) */}
+              <g pointerEvents="none">
+                <circle
+                  cx={px}
+                  cy={py}
+                  r={screwR + 0.45}
+                  fill="#e2e8f0"
+                  stroke="#475569"
+                  strokeWidth={0.4}
+                />
+                <circle
+                  cx={px}
+                  cy={py}
+                  r={screwR * 0.72}
+                  fill="#cbd5e1"
+                  stroke="#334155"
+                  strokeWidth={0.35}
+                />
+                <line
+                  x1={px - screwR * 0.48}
+                  y1={py - screwR * 0.48}
+                  x2={px + screwR * 0.48}
+                  y2={py + screwR * 0.48}
+                  stroke="#1e293b"
+                  strokeWidth={0.45}
+                  strokeLinecap="round"
+                />
+              </g>
+
+              {/* Expanded transparent hit target for effortless click-to-wire */}
               <circle
                 cx={px}
                 cy={py}
-                r={
-                  isStartPin
-                    ? 2.5
-                    : isWireMode || isMarkingThis
-                    ? 2.2
-                    : isHovered
-                    ? 2.1
-                    : 1.8
-                }
+                r={isWiringActive ? 5.0 : 3.6}
                 fill="transparent"
                 pointerEvents="all"
-                stroke={ringStroke}
-                strokeOpacity={isActivePin ? 0.95 : 0.45}
-                strokeWidth={isActivePin ? 0.55 : 0.35}
               />
-              {/* Ultra-fine Crosshair lines (0.8mm span, strokeWidth 0.25) */}
-              <line
-                x1={px - 0.8}
-                y1={py}
-                x2={px + 0.8}
-                y2={py}
-                stroke={ringStroke}
-                strokeOpacity={isActivePin ? 0.95 : 0.45}
-                strokeWidth={0.25}
+              {isWiringActive && !isStartPin && (
+                <circle
+                  cx={px}
+                  cy={py}
+                  r={3.2}
+                  fill="#0284c7"
+                  fillOpacity={0.14}
+                  stroke="#0284c7"
+                  strokeOpacity={0.55}
+                  strokeWidth={0.45}
+                  pointerEvents="none"
+                />
+              )}
+              <circle
+                cx={px}
+                cy={py}
+                r={isWiringActive ? 2.2 : isSelected || isHovered || isMarkingThis ? 1.8 : 1.4}
+                fill={isStartPin ? "#0284c7" : "#ffffff"}
+                stroke={
+                  isStartPin
+                    ? "#0369a1"
+                    : isWiringActive
+                      ? "#0284c7"
+                      : isMarkingThis
+                        ? "#d97706"
+                        : "#334155"
+                }
+                strokeWidth={isWiringActive ? 0.75 : 0.55}
                 pointerEvents="none"
               />
-              <line
-                x1={px}
-                y1={py - 0.8}
-                x2={px}
-                y2={py + 0.8}
-                stroke={ringStroke}
-                strokeOpacity={isActivePin ? 0.95 : 0.45}
-                strokeWidth={0.25}
-                pointerEvents="none"
-              />
-              {/* Crisp Pin Label with halo stroke - readable over CAD without clipping */}
+
+              {/* Crisp Pin Label with halo stroke (same style as Contactor / MCB) */}
               <text
-                x={px + 2.4}
-                y={py + 1}
-                fontSize={isActivePin ? 3.6 : 3.0}
-                fontFamily="system-ui, -apple-system, BlinkMacSystemFont, monospace"
-                fontWeight={600}
-                fill={isWireMode ? "#0284c7" : isDark ? "#fbbf24" : "#b45309"}
-                fillOpacity={isActivePin ? 1.0 : 0.85}
+                x={px + 3.2}
+                y={py + 0.3}
+                fontSize={3.6}
+                fontFamily="system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', monospace"
+                fontWeight={700}
+                fill={isWiringActive ? "#0369a1" : isDark ? "#f1f5f9" : "#0f172a"}
                 stroke={isDark ? "#0b0f19" : "#ffffff"}
-                strokeWidth={0.9}
+                strokeWidth={1.1}
                 strokeLinejoin="round"
                 style={{ paintOrder: "stroke fill" }}
                 textAnchor="start"
+                dominantBaseline="central"
                 pointerEvents="none"
               >
                 {pin.label}
@@ -926,6 +993,7 @@ export function Panel2DCanvas() {
   const pasteFromClipboard = usePanelStore((s) => s.pasteFromClipboard);
   const groupSelectedItems = usePanelStore((s) => s.groupSelectedItems);
   const ungroupSelectedItems = usePanelStore((s) => s.ungroupSelectedItems);
+  const toggleLockSelectedItems = usePanelStore((s) => s.toggleLockSelectedItems);
   const pushUndoSnapshot = usePanelStore((s) => s.pushUndoSnapshot);
   const setCanvasTool2D = usePanelStore((s) => s.setCanvasTool2D);
   const setActiveWireColor = usePanelStore((s) => s.setActiveWireColor);
@@ -946,6 +1014,7 @@ export function Panel2DCanvas() {
   const autoRouteAllWires = usePanelStore((s) => s.autoRouteAllWires);
   const addComponent = usePanelStore((s) => s.addComponent);
   const addCadAsset = usePanelStore((s) => s.addCadAsset);
+  const updateCadAsset = usePanelStore((s) => s.updateCadAsset);
   const addCustomDrawnComponent = usePanelStore((s) => s.addCustomDrawnComponent);
   const drawShapeMode = usePanelStore((s) => s.drawShapeMode);
   const setDrawShapeMode = usePanelStore((s) => s.setDrawShapeMode);
@@ -982,7 +1051,14 @@ export function Panel2DCanvas() {
   const [hoveredGroupId, setHoveredGroupId] = useState<string | null>(null);
   const [isLibraryDragOver, setIsLibraryDragOver] = useState(false);
   const [gridPopoverOpen, setGridPopoverOpen] = useState(false);
+  const [freeEndSnapTarget, setFreeEndSnapTarget] = useState<{
+    componentId: string;
+    pinId: string;
+    xMm: number;
+    yMm: number;
+  } | null>(null);
   const gridPopoverRef = useRef<HTMLDivElement>(null);
+  const lastWireCanvasClickRef = useRef<{ time: number; xMm: number; yMm: number } | null>(null);
 
   useEffect(() => {
     if (!gridPopoverOpen) return;
@@ -1063,12 +1139,13 @@ export function Panel2DCanvas() {
           const fromComp =
             components.find((c) => c.id === w.fromComponentId) ??
             cadAssets.find((a) => a.id === w.fromComponentId);
-          const toComp =
-            components.find((c) => c.id === w.toComponentId) ??
-            cadAssets.find((a) => a.id === w.toComponentId);
-          if (fromComp && toComp) {
-            const midX = (fromComp.xMm + toComp.xMm) / 2;
-            const midY = (fromComp.yMm + toComp.yMm) / 2;
+          const toPos = w.toFreePoint
+            ? w.toFreePoint
+            : components.find((c) => c.id === w.toComponentId) ??
+              cadAssets.find((a) => a.id === w.toComponentId);
+          if (fromComp && toPos) {
+            const midX = (fromComp.xMm + toPos.xMm) / 2;
+            const midY = (fromComp.yMm + toPos.yMm) / 2;
             minX = Math.min(minX, midX);
             maxX = Math.max(maxX, midX);
             minY = Math.min(minY, midY - 6);
@@ -1323,6 +1400,13 @@ export function Panel2DCanvas() {
         return;
       }
 
+      // Lock / Unlock: Ctrl+L / Cmd+L
+      if (mod && !e.shiftKey && e.key.toLowerCase() === "l") {
+        e.preventDefault();
+        toggleLockSelectedItems();
+        return;
+      }
+
       // Arrow Keyboard Nudge (1mm, Shift=5mm)
       if (
         e.key === "ArrowLeft" ||
@@ -1363,6 +1447,7 @@ export function Panel2DCanvas() {
     pasteFromClipboard,
     groupSelectedItems,
     ungroupSelectedItems,
+    toggleLockSelectedItems,
     nudgeSelectedItems,
   ]);
 
@@ -1494,14 +1579,17 @@ export function Panel2DCanvas() {
     if (e.button === 0) {
       const raw = screenToWorld(e.clientX, e.clientY);
       if (activeWireStartPin) {
-        // Magnetic pin snap even if click landed slightly outside component edge
-        const nearest = findNearestPin(raw.xMm, raw.yMm, 10, activeWireStartPin);
+        // Only snap to a pin when clicked directly on/very close to it (3.8mm)
+        const nearest = findNearestPin(raw.xMm, raw.yMm, 3.8, activeWireStartPin);
         if (nearest) {
           e.stopPropagation();
+          lastWireCanvasClickRef.current = null;
           handlePinClick(nearest.componentId, nearest.pinId);
           return;
         }
-        setActiveWireStartPin(null);
+        e.stopPropagation();
+        handleWiringNonPinClick(raw.xMm, raw.yMm, e.detail);
+        return;
       }
       setDragState({
         type: "marquee",
@@ -1863,9 +1951,114 @@ export function Panel2DCanvas() {
       }
       return;
     }
+
+    if (dragState.type === "cad-resize") {
+      const dxWorld = world.xMm - dragState.startWorldXMm;
+      const dyWorld = world.yMm - dragState.startWorldYMm;
+      // Rotate world delta into shape's local coordinate space
+      const invRot = (((360 - dragState.rotationDeg) % 360) as RotationDeg);
+      const localDelta = rotateLocalPoint(dxWorld, dyWorld, invRot);
+      const snapVal = (v: number) =>
+        e.altKey ? Math.round(v) : snapToGrid(v, gridSnapMm);
+      const dLocalX = snapVal(localDelta.xMm);
+      const dLocalY = snapVal(localDelta.yMm);
+
+      const minSize = 10;
+      const h = dragState.handle;
+      let left = -dragState.initialW / 2;
+      let right = dragState.initialW / 2;
+      let top = dragState.initialH / 2;
+      let bottom = -dragState.initialH / 2;
+
+      if (h.includes("e")) right = Math.max(left + minSize, right + dLocalX);
+      if (h.includes("w")) left = Math.min(right - minSize, left + dLocalX);
+      if (h.includes("n")) top = Math.max(bottom + minSize, top + dLocalY);
+      if (h.includes("s")) bottom = Math.min(top - minSize, bottom + dLocalY);
+
+      let nextW = Math.max(minSize, Math.round((right - left) * 10) / 10);
+      let nextH = Math.max(minSize, Math.round((top - bottom) * 10) / 10);
+
+      // Hold Shift on corner handles to preserve aspect ratio
+      if (e.shiftKey && h.length === 2 && dragState.initialW > 0 && dragState.initialH > 0) {
+        const aspect = dragState.initialW / dragState.initialH;
+        if (Math.abs(nextW - dragState.initialW) >= Math.abs(nextH - dragState.initialH)) {
+          nextH = Math.max(minSize, Math.round((nextW / aspect) * 10) / 10);
+          if (h.includes("n")) top = bottom + nextH;
+          else bottom = top - nextH;
+        } else {
+          nextW = Math.max(minSize, Math.round(nextH * aspect * 10) / 10);
+          if (h.includes("e")) right = left + nextW;
+          else left = right - nextW;
+        }
+      }
+
+      const localShiftX = (left + right) / 2;
+      const localShiftY = (top + bottom) / 2;
+      const worldShift = rotateLocalPoint(
+        localShiftX,
+        localShiftY,
+        dragState.rotationDeg as RotationDeg
+      );
+
+      updateCadAsset(
+        dragState.id,
+        {
+          xMm: Math.round((dragState.initialXMm + worldShift.xMm) * 10) / 10,
+          yMm: Math.round((dragState.initialYMm + worldShift.yMm) * 10) / 10,
+          boundingBoxMm: {
+            w: nextW,
+            h: nextH,
+            d: dragState.initialD,
+          },
+        },
+        { skipHistory: true }
+      );
+      return;
+    }
+
+    if (dragState.type === "wire-free-end") {
+      const targetWire = wires.find((item) => item.id === dragState.wireId);
+      const excludeFrom = targetWire
+        ? { componentId: targetWire.fromComponentId, pinId: targetWire.fromPinId }
+        : null;
+      const nearest = findNearestPin(world.xMm, world.yMm, 10, excludeFrom);
+      setFreeEndSnapTarget(nearest);
+      const nextX = nearest
+        ? nearest.xMm
+        : e.shiftKey
+          ? Math.round(world.xMm)
+          : snapToGrid(world.xMm, gridSnapMm);
+      const nextY = nearest
+        ? nearest.yMm
+        : e.shiftKey
+          ? Math.round(world.yMm)
+          : snapToGrid(world.yMm, gridSnapMm);
+      updateWire(
+        dragState.wireId,
+        { toFreePoint: { xMm: nextX, yMm: nextY }, waypoints: undefined },
+        { skipHistory: true }
+      );
+      return;
+    }
   };
 
   const handlePointerUp = (e?: React.PointerEvent) => {
+    if (dragState?.type === "wire-free-end" && freeEndSnapTarget) {
+      updateWire(
+        dragState.wireId,
+        {
+          toComponentId: freeEndSnapTarget.componentId,
+          toPinId: freeEndSnapTarget.pinId,
+          toFreePoint: undefined,
+          toFreeLabel: undefined,
+          waypoints: undefined,
+        },
+        { skipHistory: true }
+      );
+      setFreeEndSnapTarget(null);
+    } else if (freeEndSnapTarget) {
+      setFreeEndSnapTarget(null);
+    }
     if (e) {
       activePointersRef.current.delete(e.pointerId);
     } else {
@@ -1891,7 +2084,7 @@ export function Panel2DCanvas() {
         const centerY = Math.round(minY + h / 2);
 
         addCustomDrawnComponent({
-          name: drawShapeMode === "circle" ? "Round Plate" : "Busbar",
+          name: "Shape",
           xMm: centerX,
           yMm: centerY,
           widthMm: w,
@@ -1956,15 +2149,6 @@ export function Panel2DCanvas() {
     }
     setAlignmentGuides([]);
     setDragState(null);
-
-    // Support Drag-to-Wire: releasing pointer near a target pin finishes the wire automatically
-    if (e && activeWireStartPin && !dragState) {
-      const w = screenToWorld(e.clientX, e.clientY);
-      const nearest = findNearestPin(w.xMm, w.yMm, 10, activeWireStartPin);
-      if (nearest) {
-        handlePinClick(nearest.componentId, nearest.pinId);
-      }
-    }
   };
 
   const findNearestPin = (
@@ -2011,6 +2195,40 @@ export function Panel2DCanvas() {
     }
 
     return best;
+  };
+
+  const handleWiringNonPinClick = (rawXMm: number, rawYMm: number, detail: number) => {
+    if (!activeWireStartPin) return;
+    const now = Date.now();
+    const prev = lastWireCanvasClickRef.current;
+    const isDouble =
+      detail >= 2 ||
+      (prev !== null &&
+        now - prev.time < 380 &&
+        Math.hypot(rawXMm - prev.xMm, rawYMm - prev.yMm) < 14);
+
+    if (isDouble) {
+      lastWireCanvasClickRef.current = null;
+      const endX = snapToGrid(rawXMm, gridSnapMm);
+      const endY = snapToGrid(rawYMm, gridSnapMm);
+      const wireNum = wires.length + 1;
+      const prefix = activeWireColor === "PE" ? "PE" : activeWireColor === "N" ? "N" : "W";
+      addWire({
+        label: `${prefix}${String(wireNum).padStart(2, "0")}`,
+        colorCode: activeWireColor,
+        gaugeMm2: activeWireGauge,
+        fromComponentId: activeWireStartPin.componentId,
+        fromPinId: activeWireStartPin.pinId,
+        toComponentId: "__free__",
+        toPinId: "__free__",
+        toFreePoint: { xMm: endX, yMm: endY },
+        toFreeLabel: "",
+      });
+      setActiveWireStartPin(null);
+      return;
+    }
+
+    lastWireCanvasClickRef.current = { time: now, xMm: rawXMm, yMm: rawYMm };
   };
 
   const handlePinClick = (componentId: string, pinId: string) => {
@@ -2170,6 +2388,11 @@ export function Panel2DCanvas() {
       }}
       onContextMenu={(e) => {
         e.preventDefault();
+        if (activeWireStartPin) {
+          setActiveWireStartPin(null);
+          lastWireCanvasClickRef.current = null;
+          return;
+        }
         const worldPos = screenToWorld(e.clientX, e.clientY);
         setContextMenu({
           x: e.clientX,
@@ -2375,7 +2598,7 @@ export function Panel2DCanvas() {
               [
                 { id: "select", label: "Select & Move (Click Pin to Wire)", Icon: MousePointer2 },
                 { id: "measure", label: "Measure", Icon: Ruler },
-                { id: "draw", label: "Draw Geometry / Busbar", Icon: Square },
+                { id: "draw", label: "Shape", Icon: Square },
                 { id: "pan", label: "Pan Canvas", Icon: Hand },
               ] as const
             ).map(({ id, label, Icon }) => {
@@ -2650,7 +2873,7 @@ export function Panel2DCanvas() {
                 }`}
               >
                 <Square className="h-3 w-3" />
-                <span>Busbar / Plate</span>
+                <span>Rectangle</span>
               </button>
               <button
                 type="button"
@@ -2662,7 +2885,7 @@ export function Panel2DCanvas() {
                 }`}
               >
                 <Circle className="h-3 w-3" />
-                <span>Round Part</span>
+                <span>Circle</span>
               </button>
             </div>
           </div>
@@ -2870,388 +3093,59 @@ export function Panel2DCanvas() {
             </g>
           )}
 
-          {/* Wire Ducts Layer */}
-          <g>
-            {ducts.map((d) => {
-              const x = d.xMm - d.widthMm / 2;
-              const y = -(d.yMm + d.heightMm / 2);
-              const isSelected = isItemSelected("duct", d.id);
-
-              return (
-                <g key={d.id}>
-                  <g
-                    onPointerDown={(e) => {
-                      if (e.button !== 0 || canvasTool2D !== "select" || spacePressed) return;
-                      e.stopPropagation();
-                      if (e.shiftKey) {
-                        toggleSelectId({ kind: "duct", id: d.id });
-                        return;
-                      }
-                      const w = screenToWorld(e.clientX, e.clientY);
-                      if (selectedIds.length > 1 && isSelected) {
-                        pushUndoSnapshot();
-                        setDragState({
-                          type: "multi-drag",
-                          startWorldXMm: w.xMm,
-                          startWorldYMm: w.yMm,
-                          lastDxMm: 0,
-                          lastDyMm: 0,
-                        });
-                        return;
-                      }
-                      setSelected({ kind: "duct", id: d.id });
-                      pushUndoSnapshot();
-                      setDragState({
-                        type: "duct-move",
-                        id: d.id,
-                        offsetXMm: w.xMm - d.xMm,
-                        offsetYMm: w.yMm - d.yMm,
-                      });
-                    }}
-                    onContextMenu={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      if (selectedIds.length > 1 && isSelected) {
-                        setContextMenu({
-                          x: e.clientX,
-                          y: e.clientY,
-                          target: { kind: "multi" },
-                        });
-                        return;
-                      }
-                      setSelected({ kind: "duct", id: d.id });
-                      setContextMenu({
-                        x: e.clientX,
-                        y: e.clientY,
-                        target: { kind: "duct", id: d.id },
-                      });
-                    }}
-                    className="cursor-move"
-                  >
-                    {(() => {
-                      const hasDuctOverlap = collidingDuctIds.has(d.id);
-                      return (
-                        <>
-                          {hasDuctOverlap && (
-                            <rect
-                              x={x - 1.2}
-                              y={y - 1.2}
-                              width={d.widthMm + 2.4}
-                              height={d.heightMm + 2.4}
-                              fill="#ef4444"
-                              fillOpacity={0.12}
-                              stroke="#ef4444"
-                              strokeWidth={1.1}
-                              strokeDasharray="3,2"
-                              rx={1}
-                              pointerEvents="none"
-                            />
-                          )}
-                          <rect
-                            x={x}
-                            y={y}
-                            width={d.widthMm}
-                            height={d.heightMm}
-                            fill="url(#duct-hatch)"
-                            fillOpacity={0.35}
-                            stroke={hasDuctOverlap ? "#ef4444" : isSelected ? "#0284c7" : "#64748b"}
-                            strokeWidth={hasDuctOverlap ? 1.3 : isSelected ? 1.2 : 0.7}
-                            strokeDasharray="3,2"
-                          />
-                        </>
-                      );
-                    })()}
-                    <text
-                      x={x + 4}
-                      y={y + 10}
-                      fontSize={5.5}
-                      fontFamily="monospace"
-                      fill="#475569"
-                    >
-                      {d.name} ({d.widthMm}x{d.heightMm})
-                    </text>
-                    {(() => {
-                      const fillStats = ductFillMap.get(d.id);
-                      if (!fillStats) return null;
-                      const colors = getDuctFillStatusColor(fillStats.status);
-                      const isHoriz = d.orientation === "horizontal";
-                      const crossW = isHoriz ? d.heightMm : d.widthMm;
-                      const crossH = d.depthMm || crossW;
-                      const badgeText = `${crossW}x${crossH} [${fillStats.fillRatioPercent}%]`;
-                      const badgeW = 34;
-                      const badgeH = 9;
-                      const bx = isHoriz ? x + d.widthMm - badgeW - 3 : x + (d.widthMm - badgeW) / 2;
-                      const by = isHoriz ? y + 3 : y + d.heightMm - badgeH - 4;
-                      return (
-                        <g pointerEvents="none">
-                          <rect
-                            x={bx}
-                            y={by}
-                            width={badgeW}
-                            height={badgeH}
-                            rx={2}
-                            fill={colors.badgeBg}
-                            stroke={colors.badgeBorder}
-                            strokeWidth={0.5}
-                          />
-                          <text
-                            x={bx + badgeW / 2}
-                            y={by + badgeH / 2 + 0.3}
-                            textAnchor="middle"
-                            dominantBaseline="central"
-                            fontSize={4}
-                            fontFamily="monospace"
-                            fontWeight="bold"
-                            fill={colors.badgeText}
-                          >
-                            {badgeText}
-                          </text>
-                        </g>
-                      );
-                    })()}
-                  </g>
-
-                  {/* Duct Resize Handles */}
-                  {isSelected && canvasTool2D === "select" && (
-                    <>
-                      <rect
-                        x={x + d.widthMm - 3}
-                        y={-d.yMm - 3}
-                        width={6}
-                        height={6}
-                        fill="#0284c7"
-                        className="cursor-ew-resize"
-                        onPointerDown={(e) => {
-                          e.stopPropagation();
-                          pushUndoSnapshot();
-                          const w = screenToWorld(e.clientX, e.clientY);
-                          setDragState({
-                            type: "duct-resize",
-                            id: d.id,
-                            edge: "right",
-                            initialDuct: d,
-                            startWorldXMm: w.xMm,
-                            startWorldYMm: w.yMm,
-                          });
-                        }}
-                      />
-                      <rect
-                        x={d.xMm - 3}
-                        y={y - 3}
-                        width={6}
-                        height={6}
-                        fill="#0284c7"
-                        className="cursor-ns-resize"
-                        onPointerDown={(e) => {
-                          e.stopPropagation();
-                          pushUndoSnapshot();
-                          const w = screenToWorld(e.clientX, e.clientY);
-                          setDragState({
-                            type: "duct-resize",
-                            id: d.id,
-                            edge: "top",
-                            initialDuct: d,
-                            startWorldXMm: w.xMm,
-                            startWorldYMm: w.yMm,
-                          });
-                        }}
-                      />
-                    </>
-                  )}
-                </g>
-              );
-            })}
-          </g>
-
-          {/* DIN Rails Layer (TH35) */}
-          <g>
-            {rails.map((r: DinRail) => {
-              const x = r.xMm - r.lengthMm / 2;
-              const y = -(r.yMm + 17.5);
-              const isSelected = isItemSelected("rail", r.id);
-
-              const holes: number[] = [];
-              for (
-                let hx = x + 12.5;
-                hx <= x + r.lengthMm - 12.5;
-                hx += 25
-              ) {
-                holes.push(hx);
-              }
-
-              return (
-                <g key={r.id}>
-                  <g
-                    onPointerDown={(e) => {
-                      if (e.button !== 0 || canvasTool2D !== "select" || spacePressed) return;
-                      e.stopPropagation();
-                      if (e.shiftKey) {
-                        toggleSelectId({ kind: "rail", id: r.id });
-                        return;
-                      }
-                      const w = screenToWorld(e.clientX, e.clientY);
-                      if (selectedIds.length > 1 && isSelected) {
-                        pushUndoSnapshot();
-                        setDragState({
-                          type: "multi-drag",
-                          startWorldXMm: w.xMm,
-                          startWorldYMm: w.yMm,
-                          lastDxMm: 0,
-                          lastDyMm: 0,
-                        });
-                        return;
-                      }
-                      setSelected({ kind: "rail", id: r.id });
-                      pushUndoSnapshot();
-                      setDragState({
-                        type: "rail-move",
-                        id: r.id,
-                        offsetXMm: w.xMm - r.xMm,
-                        offsetYMm: w.yMm - r.yMm,
-                      });
-                    }}
-                    onContextMenu={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      if (selectedIds.length > 1 && isSelected) {
-                        setContextMenu({
-                          x: e.clientX,
-                          y: e.clientY,
-                          target: { kind: "multi" },
-                        });
-                        return;
-                      }
-                      setSelected({ kind: "rail", id: r.id });
-                      setContextMenu({
-                        x: e.clientX,
-                        y: e.clientY,
-                        target: { kind: "rail", id: r.id },
-                      });
-                    }}
-                    className="cursor-move"
-                  >
-                    {(() => {
-                      const hasRailOverlap = collidingRailIds.has(r.id);
-                      return (
-                        <>
-                          {hasRailOverlap && (
-                            <rect
-                              x={x - 1.2}
-                              y={y - 1.2}
-                              width={r.lengthMm + 2.4}
-                              height={37.4}
-                              fill="#ef4444"
-                              fillOpacity={0.12}
-                              stroke="#ef4444"
-                              strokeWidth={1.1}
-                              strokeDasharray="3,2"
-                              rx={1}
-                              pointerEvents="none"
-                            />
-                          )}
-                          <rect
-                            x={x}
-                            y={y}
-                            width={r.lengthMm}
-                            height={35}
-                            fill="#94a3b8"
-                            fillOpacity={0.22}
-                            stroke={hasRailOverlap ? "#ef4444" : isSelected ? "#0284c7" : "#475569"}
-                            strokeWidth={hasRailOverlap ? 1.3 : isSelected ? 1.2 : 0.8}
-                          />
-                        </>
-                      );
-                    })()}
-                    <line
-                      x1={x}
-                      y1={y + 6}
-                      x2={x + r.lengthMm}
-                      y2={y + 6}
-                      stroke="#64748b"
-                      strokeWidth={0.4}
-                    />
-                    <line
-                      x1={x}
-                      y1={y + 29}
-                      x2={x + r.lengthMm}
-                      y2={y + 29}
-                      stroke="#64748b"
-                      strokeWidth={0.4}
-                    />
-                    {holes.map((hx, idx) => (
-                      <circle
-                        key={idx}
-                        cx={hx}
-                        cy={y + 17.5}
-                        r={1.6}
-                        fill="#ffffff"
-                        stroke="#475569"
-                        strokeWidth={0.4}
-                      />
-                    ))}
-                    <text
-                      x={x + 6}
-                      y={y + 13}
-                      fontSize={6}
-                      fontFamily="monospace"
-                      fontWeight="bold"
-                      fill="#1e293b"
-                    >
-                      {r.name} ({r.lengthMm}mm)
-                    </text>
-                  </g>
-
-                  {/* Rail Resize Handles */}
-                  {isSelected && canvasTool2D === "select" && (
-                    <>
-                      <rect
-                        x={x - 3}
-                        y={y + 14.5}
-                        width={6}
-                        height={6}
-                        fill="#0284c7"
-                        className="cursor-ew-resize"
-                        onPointerDown={(e) => {
-                          e.stopPropagation();
-                          pushUndoSnapshot();
-                          const w = screenToWorld(e.clientX, e.clientY);
-                          setDragState({
-                            type: "rail-resize",
-                            id: r.id,
-                            edge: "left",
-                            initialXMm: r.xMm,
-                            initialLengthMm: r.lengthMm,
-                            startWorldXMm: w.xMm,
-                          });
-                        }}
-                      />
-                      <rect
-                        x={x + r.lengthMm - 3}
-                        y={y + 14.5}
-                        width={6}
-                        height={6}
-                        fill="#0284c7"
-                        className="cursor-ew-resize"
-                        onPointerDown={(e) => {
-                          e.stopPropagation();
-                          pushUndoSnapshot();
-                          const w = screenToWorld(e.clientX, e.clientY);
-                          setDragState({
-                            type: "rail-resize",
-                            id: r.id,
-                            edge: "right",
-                            initialXMm: r.xMm,
-                            initialLengthMm: r.lengthMm,
-                            startWorldXMm: w.xMm,
-                          });
-                        }}
-                      />
-                    </>
-                  )}
-                </g>
-              );
-            })}
-          </g>
+          {/* Wire Ducts & DIN Rails Layer (Memoized) */}
+          <RailsDuctsLayer2D
+            ducts={ducts}
+            rails={rails}
+            canvasTool2D={canvasTool2D}
+            spacePressed={spacePressed}
+            activeWireStartPin={activeWireStartPin}
+            selectedIds={selectedIds}
+            isItemSelected={isItemSelected}
+            collidingDuctIds={collidingDuctIds}
+            collidingRailIds={collidingRailIds}
+            ductFillMap={ductFillMap}
+            screenToWorld={screenToWorld}
+            toggleSelectId={toggleSelectId}
+            setSelected={setSelected}
+            pushUndoSnapshot={pushUndoSnapshot}
+            onStartMultiDrag={(w) =>
+              setDragState({
+                type: "multi-drag",
+                startWorldXMm: w.xMm,
+                startWorldYMm: w.yMm,
+                lastDxMm: 0,
+                lastDyMm: 0,
+              })
+            }
+            onStartDuctMove={(id, offsetXMm, offsetYMm) =>
+              setDragState({ type: "duct-move", id, offsetXMm, offsetYMm })
+            }
+            onStartDuctResize={(initialDuct, edge, w) =>
+              setDragState({
+                type: "duct-resize",
+                id: initialDuct.id,
+                edge,
+                initialDuct,
+                startWorldXMm: w.xMm,
+                startWorldYMm: w.yMm,
+              })
+            }
+            onStartRailMove={(id, offsetXMm, offsetYMm) =>
+              setDragState({ type: "rail-move", id, offsetXMm, offsetYMm })
+            }
+            onStartRailResize={(rail, edge, startWorldXMm) =>
+              setDragState({
+                type: "rail-resize",
+                id: rail.id,
+                edge,
+                initialXMm: rail.xMm,
+                initialLengthMm: rail.lengthMm,
+                startWorldXMm,
+              })
+            }
+            onOpenContextMenu={(x, y, target) => setContextMenu({ x, y, target })}
+          />
 
           {/* Visual Group Boxes Layer */}
           {(() => {
@@ -3259,7 +3153,7 @@ export function Panel2DCanvas() {
             const groupsMap = new Map<string, {
               groupId: string;
               groupName?: string;
-              items: Array<{ kind: "component" | "cad"; id: string; x1: number; y1: number; x2: number; y2: number }>;
+              items: Array<{ kind: "component" | "cad" | "rail" | "duct"; id: string; x1: number; y1: number; x2: number; y2: number }>;
             }>();
 
             for (const c of components) {
@@ -3290,6 +3184,42 @@ export function Panel2DCanvas() {
                 const minY = -(a.yMm + eff.heightMm / 2);
                 const maxY = -(a.yMm - eff.heightMm / 2);
                 g.items.push({ kind: "cad", id: a.id, x1: minX, y1: minY, x2: maxX, y2: maxY });
+              }
+            }
+
+            for (const r of rails) {
+              if (r.groupId) {
+                if (!groupsMap.has(r.groupId)) {
+                  groupsMap.set(r.groupId, { groupId: r.groupId, groupName: r.groupName, items: [] });
+                }
+                const g = groupsMap.get(r.groupId)!;
+                if (!g.groupName && r.groupName) g.groupName = r.groupName;
+                g.items.push({
+                  kind: "rail",
+                  id: r.id,
+                  x1: r.xMm - r.lengthMm / 2,
+                  y1: -(r.yMm + 17.5),
+                  x2: r.xMm + r.lengthMm / 2,
+                  y2: -(r.yMm - 17.5),
+                });
+              }
+            }
+
+            for (const d of ducts) {
+              if (d.groupId) {
+                if (!groupsMap.has(d.groupId)) {
+                  groupsMap.set(d.groupId, { groupId: d.groupId, groupName: d.groupName, items: [] });
+                }
+                const g = groupsMap.get(d.groupId)!;
+                if (!g.groupName && d.groupName) g.groupName = d.groupName;
+                g.items.push({
+                  kind: "duct",
+                  id: d.id,
+                  x1: d.xMm - d.widthMm / 2,
+                  y1: -(d.yMm + d.heightMm / 2),
+                  x2: d.xMm + d.widthMm / 2,
+                  y2: -(d.yMm - d.heightMm / 2),
+                });
               }
             }
 
@@ -3395,7 +3325,7 @@ export function Panel2DCanvas() {
                     const w = screenToWorld(e.clientX, e.clientY);
                     const rot = comp.rotationDeg ?? 0;
                     let nearestPinId: string | null = null;
-                    let bestDist = 10;
+                    let bestDist = 3.8;
                     for (const p of comp.pins) {
                       const rp = rotateLocalPoint(p.localXMm, p.localYMm, rot);
                       const d = Math.hypot(
@@ -3408,7 +3338,10 @@ export function Panel2DCanvas() {
                       }
                     }
                     if (nearestPinId) {
+                      lastWireCanvasClickRef.current = null;
                       handlePinClick(comp.id, nearestPinId);
+                    } else {
+                      handleWiringNonPinClick(w.xMm, w.yMm, e.detail);
                     }
                     return;
                   }
@@ -3594,371 +3527,74 @@ export function Panel2DCanvas() {
                       worldY: worldCoords.yMm,
                     });
                   }}
+                  onStartResize={(e, handle) => {
+                    if (asset.locked) return;
+                    pushUndoSnapshot();
+                    const w = screenToWorld(e.clientX, e.clientY);
+                    setDragState({
+                      type: "cad-resize",
+                      id: asset.id,
+                      handle,
+                      initialXMm: asset.xMm,
+                      initialYMm: asset.yMm,
+                      initialW: asset.boundingBoxMm.w,
+                      initialH: asset.boundingBoxMm.h,
+                      initialD: asset.boundingBoxMm.d,
+                      rotationDeg: asset.rotationDeg ?? 0,
+                      startWorldXMm: w.xMm,
+                      startWorldYMm: w.yMm,
+                    });
+                  }}
                 />
               );
             })}
           </g>
 
-          {/* Wires / Netlist Layer */}
-          <g pointerEvents={canvasTool2D === "wire" || Boolean(activeWireStartPin) ? "none" : undefined}>
-            {wires.map((w) => {
-              const p1 = pinMap.get(`${w.fromComponentId}:${w.fromPinId}`);
-              const p2 = pinMap.get(`${w.toComponentId}:${w.toPinId}`);
-              if (!p1 || !p2) return null;
-
-              // Live pin-bound routing: verify cached waypoints still match live p1 & p2 (RelayTest pattern)
-              const hasSyncedWaypoints =
-                w.waypoints &&
-                w.waypoints.length >= 2 &&
-                Math.hypot(w.waypoints[0].xMm - p1.x, -w.waypoints[0].yMm - p1.y) < 0.5 &&
-                Math.hypot(
-                  w.waypoints[w.waypoints.length - 1].xMm - p2.x,
-                  -w.waypoints[w.waypoints.length - 1].yMm - p2.y
-                ) < 0.5;
-
-              const wireObstacles = buildComponentObstacles(components, cadAssets);
-              const exit1 = resolvePinExitInfo(
-                components,
-                cadAssets,
-                w.fromComponentId,
-                w.fromPinId
-              );
-              const exit2 = resolvePinExitInfo(
-                components,
-                cadAssets,
-                w.toComponentId,
-                w.toPinId
-              );
-              const waypoints = hasSyncedWaypoints
-                ? w.waypoints!.map((pt) => ({ x: pt.xMm, y: -pt.yMm }))
-                : autoRouteDuctsEnabled && ducts.length > 0
-                  ? routeWireThroughDucts(
-                      { x: p1.x, y: -p1.y },
-                      { x: p2.x, y: -p2.y },
-                      ducts,
-                      rails,
-                      0,
-                      {
-                        startExitDir: exit1?.exitDir,
-                        endExitDir: exit2?.exitDir,
-                        startStubPt: exit1?.stubPt,
-                        endStubPt: exit2?.stubPt,
-                        obstacles: wireObstacles,
-                      }
-                    ).map((pt) => ({ x: pt.x, y: -pt.y }))
-                  : routeOrthogonalWire(p1, p2, "horizontal-first");
-              const pathD = pointsToRoundedSvgPath(waypoints, 4);
-              const stroke = WIRE_COLOR_MAP[w.colorCode] || "#2563eb";
-              const wireDiaMm = getWireOuterDiameterMm(w.gaugeMm2);
-              const isSelected = isItemSelected("wire", w.id);
-
-              // Place label at the exact midpoint of the longest straight span
-              let mid = p1;
-              let bestLen = -1;
-              for (let i = 0; i < waypoints.length - 1; i++) {
-                const a = waypoints[i];
-                const b = waypoints[i + 1];
-                const len = Math.hypot(b.x - a.x, b.y - a.y);
-                if (len > bestLen) {
-                  bestLen = len;
-                  mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-                }
-              }
-
-              return (
-                <g
-                  key={w.id}
-                  onPointerDown={(e) => {
-                    if (e.button !== 0 || canvasTool2D !== "select" || spacePressed) return;
-                    e.stopPropagation();
-                    if (e.shiftKey) {
-                      toggleSelectId({ kind: "wire", id: w.id });
-                      return;
-                    }
-                    setSelected({ kind: "wire", id: w.id });
-                  }}
-                  onContextMenu={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    if (selectedIds.length > 1 && isSelected) {
-                      setContextMenu({
-                        x: e.clientX,
-                        y: e.clientY,
-                        target: { kind: "multi" },
-                      });
-                      return;
-                    }
-                    setSelected({ kind: "wire", id: w.id });
-                    setContextMenu({
-                      x: e.clientX,
-                      y: e.clientY,
-                      target: { kind: "wire", id: w.id },
-                    });
-                  }}
-                  className="cursor-pointer"
-                >
-                  <path
-                    d={pathD}
-                    fill="none"
-                    stroke="transparent"
-                    strokeWidth={Math.max(8, wireDiaMm + 4)}
-                  />
-                  {isSelected && (
-                    <path
-                      d={pathD}
-                      fill="none"
-                      stroke="#0284c7"
-                      strokeWidth={wireDiaMm + 2.2}
-                      strokeOpacity={0.35}
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  )}
-                  <path
-                    d={pathD}
-                    fill="none"
-                    stroke={stroke}
-                    strokeWidth={wireDiaMm}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-
-                  {/* Interactive Draggable Segments, Corner Nodes & Midpoint Handles when Wire is Selected */}
-                  {isSelected && !spacePressed && (() => {
-                    const worldWaypoints = waypoints.map((pt) => ({
-                      xMm: pt.x,
-                      yMm: -pt.y,
-                    }));
-                    return (
-                      <g>
-                        {/* Draggable interior orthogonal segments (slide perpendicular to segment) */}
-                        {waypoints.slice(0, -1).map((a, segIdx) => {
-                          const b = waypoints[segIdx + 1];
-                          const isInterior = segIdx > 0 && segIdx + 1 < waypoints.length - 1;
-                          if (!isInterior) return null;
-                          const isHoriz = Math.abs(a.y - b.y) < 1;
-                          const isVert = Math.abs(a.x - b.x) < 1;
-                          if (!isHoriz && !isVert) return null;
-                          return (
-                            <line
-                              key={`wseg-${w.id}-${segIdx}`}
-                              x1={a.x}
-                              y1={a.y}
-                              x2={b.x}
-                              y2={b.y}
-                              stroke="transparent"
-                              strokeWidth={8}
-                              className={isHoriz ? "cursor-ns-resize" : "cursor-ew-resize"}
-                              onPointerDown={(e) => {
-                                if (e.button !== 0) return;
-                                e.stopPropagation();
-                                pushUndoSnapshot();
-                                setDragState({
-                                  type: "wire-segment",
-                                  wireId: w.id,
-                                  segIndex: segIdx,
-                                  orientation: isHoriz ? "horizontal" : "vertical",
-                                  waypoints: worldWaypoints,
-                                });
-                              }}
-                            />
-                          );
-                        })}
-
-                        {/* Midpoint + handles on EVERY segment (>= 16mm) to pull out unlimited extra bends */}
-                        {waypoints.slice(0, -1).map((a, segIdx) => {
-                          const b = waypoints[segIdx + 1];
-                          const segLen = Math.hypot(b.x - a.x, b.y - a.y);
-                          if (segLen < 16) return null;
-                          const mx = (a.x + b.x) / 2;
-                          const my = (a.y + b.y) / 2;
-                          return (
-                            <g
-                              key={`wmid-${w.id}-${segIdx}`}
-                              className="cursor-grab active:cursor-grabbing"
-                              onPointerDown={(e) => {
-                                if (e.button !== 0) return;
-                                e.stopPropagation();
-                                pushUndoSnapshot();
-                                const inserted = [
-                                  ...worldWaypoints.slice(0, segIdx + 1),
-                                  { xMm: mx, yMm: -my },
-                                  ...worldWaypoints.slice(segIdx + 1),
-                                ];
-                                updateWire(
-                                  w.id,
-                                  { waypoints: inserted },
-                                  { skipHistory: true }
-                                );
-                                setDragState({
-                                  type: "wire-waypoint",
-                                  wireId: w.id,
-                                  index: segIdx + 1,
-                                  waypoints: inserted,
-                                });
-                              }}
-                            >
-                              <circle cx={mx} cy={my} r={5} fill="transparent" />
-                              <circle
-                                cx={mx}
-                                cy={my}
-                                r={2.2}
-                                fill="#e0f2fe"
-                                stroke="#0284c7"
-                                strokeWidth={0.7}
-                                pointerEvents="none"
-                              />
-                              <line
-                                x1={mx - 1.1}
-                                y1={my}
-                                x2={mx + 1.1}
-                                y2={my}
-                                stroke="#0284c7"
-                                strokeWidth={0.55}
-                                pointerEvents="none"
-                              />
-                              <line
-                                x1={mx}
-                                y1={my - 1.1}
-                                x2={mx}
-                                y2={my + 1.1}
-                                stroke="#0284c7"
-                                strokeWidth={0.55}
-                                pointerEvents="none"
-                              />
-                            </g>
-                          );
-                        })}
-
-                        {/* Draggable 90° corner nodes at every bend (RelayTest style) */}
-                        {waypoints.slice(1, -1).map((pt, offsetIdx) => {
-                          const nodeIdx = offsetIdx + 1;
-                          return (
-                            <g
-                              key={`wnode-${w.id}-${nodeIdx}`}
-                              className="cursor-move"
-                              onPointerDown={(e) => {
-                                if (e.button !== 0) return;
-                                e.stopPropagation();
-                                pushUndoSnapshot();
-                                setDragState({
-                                  type: "wire-waypoint",
-                                  wireId: w.id,
-                                  index: nodeIdx,
-                                  waypoints: worldWaypoints,
-                                });
-                              }}
-                              onDoubleClick={(e) => {
-                                e.stopPropagation();
-                                e.preventDefault();
-                                if (worldWaypoints.length <= 2) return;
-                                const pruned = worldWaypoints.filter(
-                                  (_, idx) => idx !== nodeIdx
-                                );
-                                updateWire(w.id, { waypoints: pruned });
-                              }}
-                            >
-                              <circle cx={pt.x} cy={pt.y} r={5.5} fill="transparent" />
-                              <circle
-                                cx={pt.x}
-                                cy={pt.y}
-                                r={2.8}
-                                fill="#ffffff"
-                                stroke="#0284c7"
-                                strokeWidth={0.95}
-                                pointerEvents="none"
-                              />
-                              <circle
-                                cx={pt.x}
-                                cy={pt.y}
-                                r={1.0}
-                                fill="#0284c7"
-                                pointerEvents="none"
-                              />
-                            </g>
-                          );
-                        })}
-                      </g>
-                    );
-                  })()}
-                </g>
-              );
-            })}
-
-            {/* Live Wire Preview with Magnetic Pin Snap */}
-            {activeWireStartPin && cursorWorld && (() => {
-              const p1 = pinMap.get(
-                `${activeWireStartPin.componentId}:${activeWireStartPin.pinId}`
-              );
-              if (!p1) return null;
-              const snappedTarget = findNearestPin(
-                cursorWorld.xMm,
-                cursorWorld.yMm,
-                10,
-                activeWireStartPin
-              );
-              const endWorldX = snappedTarget ? snappedTarget.xMm : cursorWorld.xMm;
-              const endWorldY = snappedTarget ? snappedTarget.yMm : cursorWorld.yMm;
-              const previewObstacles = buildComponentObstacles(components, cadAssets);
-              const startExit = resolvePinExitInfo(
-                components,
-                cadAssets,
-                activeWireStartPin.componentId,
-                activeWireStartPin.pinId
-              );
-              const endExit = snappedTarget
-                ? resolvePinExitInfo(
-                    components,
-                    cadAssets,
-                    snappedTarget.componentId,
-                    snappedTarget.pinId
-                  )
-                : null;
-              const previewPts =
-                autoRouteDuctsEnabled && ducts.length > 0
-                  ? routeWireThroughDucts(
-                      { x: p1.x, y: -p1.y },
-                      { x: endWorldX, y: endWorldY },
-                      ducts,
-                      rails,
-                      wires.length,
-                      {
-                        startExitDir: startExit?.exitDir,
-                        endExitDir: endExit?.exitDir,
-                        startStubPt: startExit?.stubPt,
-                        endStubPt: endExit?.stubPt,
-                        obstacles: previewObstacles,
-                      }
-                    ).map((pt) => ({ x: pt.x, y: -pt.y }))
-                  : routeOrthogonalWire(
-                      p1,
-                      { x: endWorldX, y: -endWorldY },
-                      "horizontal-first"
-                    );
-              return (
-                <g className="pointer-events-none">
-                  <path
-                    d={pointsToSvgPath(previewPts)}
-                    fill="none"
-                    stroke={WIRE_COLOR_MAP[activeWireColor] || "#0284c7"}
-                    strokeWidth={snappedTarget ? 1.4 : 1.1}
-                    strokeDasharray={snappedTarget ? undefined : "3,2"}
-                  />
-                  {snappedTarget && (
-                    <circle
-                      cx={snappedTarget.xMm}
-                      cy={-snappedTarget.yMm}
-                      r={4.2}
-                      fill="#0284c7"
-                      fillOpacity={0.22}
-                      stroke="#0284c7"
-                      strokeWidth={0.9}
-                    />
-                  )}
-                </g>
-              );
-            })()}
-          </g>
+          {/* Wires / Netlist Layer (Memoized) */}
+          <WiresLayer2D
+            wires={wires}
+            components={components}
+            cadAssets={cadAssets}
+            ducts={ducts}
+            rails={rails}
+            pinMap={pinMap}
+            canvasTool2D={canvasTool2D}
+            spacePressed={spacePressed}
+            theme={theme}
+            autoRouteDuctsEnabled={autoRouteDuctsEnabled}
+            activeWireStartPin={activeWireStartPin}
+            activeWireColor={activeWireColor}
+            cursorWorld={cursorWorld}
+            freeEndSnapTarget={freeEndSnapTarget}
+            selectedIds={selectedIds}
+            isItemSelected={isItemSelected}
+            findNearestPin={findNearestPin}
+            toggleSelectId={toggleSelectId}
+            setSelected={setSelected}
+            pushUndoSnapshot={pushUndoSnapshot}
+            updateWire={updateWire}
+            onStartWireFreeEndDrag={(wireId) =>
+              setDragState({ type: "wire-free-end", wireId })
+            }
+            onStartWireSegmentDrag={(wireId, segIndex, orientation, waypoints) =>
+              setDragState({
+                type: "wire-segment",
+                wireId,
+                segIndex,
+                orientation,
+                waypoints,
+              })
+            }
+            onStartWireWaypointDrag={(wireId, index, waypoints) =>
+              setDragState({
+                type: "wire-waypoint",
+                wireId,
+                index,
+                waypoints,
+              })
+            }
+            onOpenContextMenu={(x, y, target) => setContextMenu({ x, y, target })}
+          />
 
           {/* Measuring Dimension Overlay */}
           {measureStart && (measureEnd || measureHover) && (() => {

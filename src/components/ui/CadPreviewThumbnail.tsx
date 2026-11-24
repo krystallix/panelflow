@@ -27,25 +27,20 @@ export function CadPreviewThumbnail({
   pins = [],
   className = "h-14 w-full",
 }: CadPreviewThumbnailProps) {
-  // If item is a custom drawn busbar/plate with material
-  if (materialType && !imageOverlayUrl) {
-    const mat = MATERIAL_PRESETS[materialType] || MATERIAL_PRESETS.copper;
+  // If item is a custom drawn Shape (uniform monochrome light gray matching library)
+  if ((materialType || drawShape) && !imageOverlayUrl) {
     const isCircle = drawShape === "circle";
     return (
       <div className={`relative flex items-center justify-center p-2 ${className}`}>
         <div
-          className={`${isCircle ? "h-8 w-8 rounded-full" : "h-7 w-4/5 rounded-xs"} border shadow-xs flex items-center justify-center`}
-          style={{
-            backgroundColor: mat.fillColor,
-            borderColor: mat.borderColor,
-          }}
+          className={`${isCircle ? "h-8 w-8 rounded-full" : "h-7 w-4/5 rounded-xs"} border border-slate-700 bg-slate-100 shadow-xs flex items-center justify-center`}
         >
-          <span className="font-sans text-[8px] font-bold text-black/70">
-            {mat.name.split(" ")[0]}
+          <span className="font-sans text-[8px] font-semibold text-slate-700">
+            Shape
           </span>
         </div>
         {pins.length > 0 && (
-          <span className="absolute bottom-0.5 right-0.5 rounded bg-black/70 px-1 py-0.2 font-sans text-[8px] font-bold text-amber-400">
+          <span className="absolute bottom-0.5 right-0.5 rounded bg-slate-900/80 px-1 py-0.2 font-sans text-[8px] font-bold text-white">
             {pins.length}P
           </span>
         )}

@@ -4,9 +4,9 @@
   "private": true,
   "description": "Web-based 3D Electrical Panel Layout & CAD Engineering Workbench",
   "scripts": {
-    "dev": "next dev --webpack -H 127.0.0.1 -p 3020",
+    "dev": "next dev --webpack -H 0.0.0.0 -p 3020",
     "build": "next build",
-    "start": "next start -H 127.0.0.1 -p 3020",
+    "start": "next start -H 0.0.0.0 -p 3020",
     "test": "vitest run",
     "test:watch": "vitest"
   },

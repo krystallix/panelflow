@@ -755,4 +755,54 @@ describe("usePanelStore - Default 2D & Context Menu Actions", () => {
     expect(wire).toBeDefined();
     expect(wire?.toPinId).toBe(pinId);
   });
+
+  it("supports grouping, ungrouping, and locking across DIN rails and wire ducts", () => {
+    const store = usePanelStore.getState();
+    const rail = store.rails[0];
+    const duct = store.ducts[0];
+    expect(rail).toBeDefined();
+    expect(duct).toBeDefined();
+
+    store.setSelectedIds([
+      { kind: "rail", id: rail.id },
+      { kind: "duct", id: duct.id },
+    ]);
+
+    const groupId = store.groupSelectedItems();
+    expect(groupId).toBeTruthy();
+
+    let state = usePanelStore.getState();
+    expect(state.rails.find((r) => r.id === rail.id)?.groupId).toBe(groupId);
+    expect(state.ducts.find((d) => d.id === duct.id)?.groupId).toBe(groupId);
+
+    // Moving grouped duct also moves grouped rail
+    const prevRailY = state.rails.find((r) => r.id === rail.id)!.yMm;
+    const prevDuctY = state.ducts.find((d) => d.id === duct.id)!.yMm;
+    store.updateDuct(duct.id, { yMm: prevDuctY + 20 });
+    state = usePanelStore.getState();
+    expect(state.rails.find((r) => r.id === rail.id)?.yMm).toBe(prevRailY + 20);
+
+    // Lock both rail and duct -> cannot move or delete
+    store.toggleLockSelectedItems(true);
+    state = usePanelStore.getState();
+    expect(state.rails.find((r) => r.id === rail.id)?.locked).toBe(true);
+    expect(state.ducts.find((d) => d.id === duct.id)?.locked).toBe(true);
+
+    const lockedDuctY = state.ducts.find((d) => d.id === duct.id)!.yMm;
+    store.updateDuct(duct.id, { yMm: lockedDuctY + 50 });
+    store.removeDuct(duct.id);
+    store.removeRail(rail.id);
+    store.deleteSelectedItems();
+    state = usePanelStore.getState();
+    expect(state.ducts.find((d) => d.id === duct.id)?.yMm).toBe(lockedDuctY);
+    expect(state.rails.find((r) => r.id === rail.id)).toBeDefined();
+
+    // Unlock and ungroup
+    store.toggleLockSelectedItems(false);
+    store.ungroupSelectedItems();
+    state = usePanelStore.getState();
+    expect(state.rails.find((r) => r.id === rail.id)?.locked).toBe(false);
+    expect(state.rails.find((r) => r.id === rail.id)?.groupId).toBeUndefined();
+    expect(state.ducts.find((d) => d.id === duct.id)?.groupId).toBeUndefined();
+  });
 });

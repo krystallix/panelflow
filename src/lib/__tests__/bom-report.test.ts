@@ -199,4 +199,27 @@ describe("Auto-BOM & Wire Cutting Schedule Engine", () => {
     expect(wireCsv).toContain("W02");
     expect(wireCsv).toContain("Stripping Allowance (mm)");
   });
+
+  it("includes free-end terminal wires and labels in BOM wire schedule", () => {
+    const sheet = createMockSheet();
+    sheet.wires.push({
+      id: "w-free",
+      label: "W03",
+      colorCode: "R",
+      gaugeMm2: "2.5",
+      fromComponentId: "comp-1",
+      fromPinId: "p1",
+      toComponentId: "__free__",
+      toPinId: "__free__",
+      toFreePoint: { xMm: 0, yMm: 100 },
+      toFreeLabel: "Power Source R",
+    });
+
+    const report = generateBomReport([sheet], sheet.id, "active", "Test Project");
+    const freeRow = report.wires.find((w) => w.id === "w-free");
+    expect(freeRow).toBeDefined();
+    expect(freeRow?.toTag).toBe("Power Source R");
+    expect(freeRow?.toDisplay).toBe("Power Source R");
+    expect(freeRow!.routeLengthMm).toBeGreaterThan(0);
+  });
 });

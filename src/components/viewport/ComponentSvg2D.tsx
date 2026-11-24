@@ -195,15 +195,15 @@ export function ComponentSvg2D({
       )}
 
       {/* TOR Plug-In Prongs (extending upward into parent Contactor) */}
-      {id === "tor" && (
+      {(id === "tor" || id === "tor-tht18") && (
         <g fill="#cbd5e1" stroke="#334155" strokeWidth={0.5}>
-          {[-13, 0, 13].map((pxOff, idx) => (
+          {(id === "tor-tht18" ? [-12.5, -4.2, 4.2] : [-13, 0, 13]).map((pxOff, idx) => (
             <rect
               key={`prong-${idx}`}
               x={cx + pxOff - 1.2}
-              y={y - 7.5}
+              y={y - (id === "tor-tht18" ? 10 : 7.5)}
               width={2.4}
-              height={8}
+              height={id === "tor-tht18" ? 10.5 : 8}
               rx={0.4}
             />
           ))}
@@ -438,32 +438,143 @@ export function ComponentSvg2D({
           {/* Bottom Power Terminal Row (2T1/4T2/6T3) */}
           <rect x={x + 1.5} y={y + h - 13.5} width={w - 3} height={12} rx={0.6} fill="#e2e8f0" stroke={strokeLight} strokeWidth={0.45} />
         </g>
-      ) : id === "relay" ? (
+      ) : id === "contactor-st10" ? (
         <g>
-          {/* Socket Terminal Zones */}
-          <rect x={x + 1} y={y + 1.5} width={w - 2} height={11} rx={0.5} fill="#e2e8f0" stroke={strokeLight} strokeWidth={0.4} />
-          <rect x={x + 1} y={y + h - 12.5} width={w - 2} height={11} rx={0.5} fill="#e2e8f0" stroke={strokeLight} strokeWidth={0.4} />
-          {/* Clear Polycarbonate Relay Body */}
-          <rect x={x + 2.2} y={y + 15} width={w - 4.4} height={h - 30} rx={1.2} fill="#ffffff" stroke="#334155" strokeWidth={0.65} />
-          {/* Internal Coil & Contact Schematic Hint */}
-          <rect x={cx - 4.5} y={cy - 10} width={9} height={14} rx={0.6} fill="#e2e8f0" stroke="#475569" strokeWidth={0.55} />
-          <line x1={cx - 4.5} y1={cy - 3} x2={cx + 4.5} y2={cy - 3} stroke="#64748b" strokeWidth={0.45} />
-          <circle cx={cx} cy={cy + 10} r={1.8} fill="#334155" />
+          {/* Mitsubishi S-T10 Top Coil Block (A2 left, voltage label center, A1 right) */}
+          <rect x={x + 3.5} y={y + 1.2} width={w - 7} height={13} rx={0.7} fill="#e2e8f0" stroke="#334155" strokeWidth={0.55} />
+          <rect x={cx - 4.2} y={y + 2.4} width={8.4} height={10.4} rx={0.5} fill="#ffffff" stroke={strokeSub} strokeWidth={0.45} />
+          {/* Upper 4-Pole Terminal Tier (1/L1, 3/L2, 5/L3, 13NO) */}
+          <rect x={x + 1} y={y + 17} width={w - 2} height={13} rx={0.6} fill="#f1f5f9" stroke={strokeSub} strokeWidth={0.5} />
+          {/* Lower 4-Pole Terminal Tier (2/T1, 4/T2, 6/T3, 14NO) */}
+          <rect x={x + 1} y={y + h - 16} width={w - 2} height={14.5} rx={0.6} fill="#f1f5f9" stroke={strokeSub} strokeWidth={0.5} />
+          {/* 4-Column Barrier Fins on upper & lower terminal decks */}
+          {[-8.35, 0, 8.35].map((off, idx) => (
+            <g key={`st10-fin-${idx}`} stroke={strokeSub} strokeWidth={0.55}>
+              <line x1={cx + off} y1={y + 17} x2={cx + off} y2={y + 30} />
+              <line x1={cx + off} y1={y + h - 16} x2={cx + off} y2={y + h - 1.5} />
+            </g>
+          ))}
+          {/* Central Faceplate & Recessed Plunger Window */}
+          <rect x={x + 1.8} y={y + 31.5} width={w - 3.6} height={26} rx={0.8} fill="#ffffff" stroke="#334155" strokeWidth={0.6} />
+          {/* Plunger Guide Frame */}
+          <rect x={cx - 7.5} y={y + 36} width={15} height={15} rx={0.8} fill="#f1f5f9" stroke={strokeSub} strokeWidth={0.5} />
+          {/* Center Dark Actuator Plunger */}
+          <rect x={cx - 2.6} y={y + 38.5} width={5.2} height={10} rx={0.6} fill="#1e293b" stroke="#0f172a" strokeWidth={0.45} />
+          <line x1={cx - 5.2} y1={y + 37.5} x2={cx - 5.2} y2={y + 49.5} stroke="#94a3b8" strokeWidth={0.55} />
+          <line x1={cx + 5.2} y1={y + 37.5} x2={cx + 5.2} y2={y + 49.5} stroke="#94a3b8" strokeWidth={0.55} />
         </g>
-      ) : id === "timer-relay" ? (
+      ) : id === "tor-tht18" ? (
         <g>
-          <rect x={x + 1} y={y + 1.5} width={w - 2} height={11} rx={0.5} fill="#e2e8f0" stroke={strokeLight} strokeWidth={0.4} />
-          <rect x={x + 1} y={y + h - 12.5} width={w - 2} height={11} rx={0.5} fill="#e2e8f0" stroke={strokeLight} strokeWidth={0.4} />
-          {/* Front Control Face */}
-          <rect x={x + 1.8} y={y + 16} width={w - 3.6} height={h - 32} rx={0.9} fill="#ffffff" stroke="#334155" strokeWidth={0.6} />
-          {/* Top Range Dial & Bottom Time Dial */}
-          <circle cx={cx} cy={cy - 9} r={4.8} fill="#f1f5f9" stroke="#1e293b" strokeWidth={0.6} />
-          <line x1={cx} y1={cy - 9} x2={cx + 2.8} y2={cy - 11.5} stroke="#0f172a" strokeWidth={0.8} />
-          <circle cx={cx} cy={cy + 5} r={4.8} fill="#f1f5f9" stroke="#1e293b" strokeWidth={0.6} />
-          <line x1={cx} y1={cy + 5} x2={cx - 2.5} y2={cy + 2.5} stroke="#0f172a" strokeWidth={0.8} />
-          {/* Dual Status LEDs */}
-          <circle cx={cx - 3} cy={cy + 16} r={1.3} fill="#334155" />
-          <circle cx={cx + 3} cy={cy + 16} r={1.3} fill="#94a3b8" />
+          {/* Mitsubishi TH-T18 Upper Control Deck */}
+          <rect x={x + 1.5} y={y + 1.5} width={w - 3} height={15.5} rx={0.8} fill="#e2e8f0" stroke="#334155" strokeWidth={0.55} />
+          {/* Reset Bar Rectangular Button (Left-Center) */}
+          <rect x={x + 10.5} y={y + 5.5} width={11} height={6.8} rx={0.8} fill="#475569" stroke="#1e293b" strokeWidth={0.55} />
+          {/* Round Current Setting Dial with Cross Slot (Right-Center) */}
+          <circle cx={cx + 8.5} cy={y + 9} r={6.2} fill="#ffffff" stroke="#1e293b" strokeWidth={0.65} />
+          <line x1={cx + 5.8} y1={y + 6.3} x2={cx + 11.2} y2={y + 11.7} stroke="#0f172a" strokeWidth={0.8} />
+          <line x1={cx + 11.2} y1={y + 6.3} x2={cx + 5.8} y2={y + 11.7} stroke="#0f172a" strokeWidth={0.8} />
+          {/* Manual Trip Indicator Slot (Far Right) */}
+          <rect x={x + w - 6.2} y={y + 5.5} width={3.2} height={8.5} rx={0.5} fill="#cbd5e1" stroke="#334155" strokeWidth={0.45} />
+          {/* Middle Raised Aux Terminal Cover (98, 97, 95) */}
+          <rect x={x + 1.2} y={y + 18} width={w - 9.5} height={10.5} rx={0.6} fill="#ffffff" stroke="#334155" strokeWidth={0.55} />
+          {/* Lower 4-Terminal Deck (2/T1, 4/T2, 6/T3, 96) */}
+          <rect x={x + 1.2} y={y + h - 12} width={w - 2.4} height={10.5} rx={0.6} fill="#f1f5f9" stroke={strokeSub} strokeWidth={0.5} />
+          {[-10.5, -0.5, 9.5].map((off, idx) => (
+            <line
+              key={`th18-div-${idx}`}
+              x1={cx + off}
+              y1={y + h - 12}
+              x2={cx + off}
+              y2={y + h - 1.5}
+              stroke={strokeLight}
+              strokeWidth={0.45}
+            />
+          ))}
+        </g>
+      ) : id === "relay-socket-my4n" ? (
+        <g>
+          {/* PYF14A 14-Pin Socket Base Only (No Relay Body) */}
+          {/* Top 2 stepped screw terminal tiers (1–4 NC, 5–8 NO) */}
+          <rect x={x + 1} y={y + 1.2} width={w - 2} height={8.8} rx={0.4} fill="#e2e8f0" stroke={strokeLight} strokeWidth={0.4} />
+          <rect x={x + 1} y={y + 10.2} width={w - 2} height={8.8} rx={0.4} fill="#f1f5f9" stroke={strokeLight} strokeWidth={0.4} />
+          {/* Bottom 2 stepped screw terminal tiers (9–12 COM, 13–14 COIL) */}
+          <rect x={x + 1} y={y + h - 19} width={w - 2} height={8.8} rx={0.4} fill="#f1f5f9" stroke={strokeLight} strokeWidth={0.4} />
+          <rect x={x + 1} y={y + h - 10} width={w - 2} height={8.8} rx={0.4} fill="#e2e8f0" stroke={strokeLight} strokeWidth={0.4} />
+          {/* Terminal barrier walls */}
+          {[-7, 0, 7].map((off, idx) => (
+            <g key={`my4-bar-${idx}`} stroke={strokeSub} strokeWidth={0.55}>
+              <line x1={cx + off} y1={y + 1.2} x2={cx + off} y2={y + 19} />
+              <line x1={cx + off} y1={y + h - 19} x2={cx + off} y2={y + h - 1.2} />
+            </g>
+          ))}
+          {/* Center recess between coil pins 13 & 14 */}
+          <rect x={cx - 6.2} y={y + h - 9.4} width={12.4} height={7.6} rx={0.4} fill="#cbd5e1" stroke={strokeSub} strokeWidth={0.4} />
+          {/* Central 14-Pin Blade Socket Receptacle */}
+          <rect x={x + 2.2} y={y + 20.5} width={w - 4.4} height={h - 41} rx={1} fill="#ffffff" stroke="#334155" strokeWidth={0.65} />
+          {/* Retaining clip side slots */}
+          <rect x={x + 0.8} y={cy - 4} width={1.6} height={8} rx={0.3} fill="#94a3b8" />
+          <rect x={x + w - 2.4} y={cy - 4} width={1.6} height={8} rx={0.3} fill="#94a3b8" />
+          {/* 14 Female Blade Pin Slots (4+4+4+2) */}
+          {[-9, -3, 3, 9].map((rowY, rIdx) => {
+            const cols = rIdx === 3 ? [-7.5, 7.5] : [-8.4, -2.8, 2.8, 8.4];
+            return cols.map((colX, cIdx) => (
+              <rect
+                key={`my4-slot-${rIdx}-${cIdx}`}
+                x={cx + colX - 1.1}
+                y={cy + rowY - 1.5}
+                width={2.2}
+                height={3}
+                rx={0.35}
+                fill="#1e293b"
+              />
+            ));
+          })}
+        </g>
+      ) : id === "relay-socket-mk3p" ? (
+        <g>
+          {/* PF113A 11-Pin Octal Socket Base Only (42.7 × 51 mm) */}
+          {/* Top 4 terminal bays (2, 1, 11, 10) */}
+          <rect x={x + 1.2} y={y + 1} width={w - 2.4} height={8.5} rx={0.4} fill="#e2e8f0" stroke={strokeSub} strokeWidth={0.45} />
+          {/* Bottom 4 terminal bays (5, 6, 7, 8) */}
+          <rect x={x + 1.2} y={y + h - 9.5} width={w - 2.4} height={8.5} rx={0.4} fill="#e2e8f0" stroke={strokeSub} strokeWidth={0.45} />
+          {/* Top & bottom barrier walls */}
+          {[-9.8, 0, 9.8].map((off, idx) => (
+            <g key={`mk3-bar-${idx}`} stroke="#334155" strokeWidth={0.7}>
+              <line x1={cx + off} y1={y + 1} x2={cx + off} y2={y + 9.5} />
+              <line x1={cx + off} y1={y + h - 9.5} x2={cx + off} y2={y + h - 1} />
+            </g>
+          ))}
+          {/* Upper-left bay (3), upper-right bay (9), lower-left bay (4) */}
+          <rect x={x + 1.2} y={y + 11.2} width={8.4} height={8.8} rx={0.4} fill="#e2e8f0" stroke={strokeSub} strokeWidth={0.45} />
+          <rect x={x + w - 9.6} y={y + 11.2} width={8.4} height={8.8} rx={0.4} fill="#e2e8f0" stroke={strokeSub} strokeWidth={0.45} />
+          <rect x={x + 1.2} y={y + h - 20} width={8.4} height={8.8} rx={0.4} fill="#e2e8f0" stroke={strokeSub} strokeWidth={0.45} />
+          {/* Left & right middle mounting ear holes */}
+          <rect x={x + 2} y={cy - 3.2} width={5.8} height={6.4} rx={1.4} fill="#ffffff" stroke="#334155" strokeWidth={0.55} />
+          <circle cx={x + 4.9} cy={cy} r={1.6} fill="#cbd5e1" stroke="#475569" strokeWidth={0.4} />
+          <rect x={x + w - 7.8} y={cy - 3.2} width={5.8} height={6.4} rx={1.4} fill="#ffffff" stroke="#334155" strokeWidth={0.55} />
+          <circle cx={x + w - 4.9} cy={cy} r={1.6} fill="#cbd5e1" stroke="#475569" strokeWidth={0.4} />
+          {/* Central Circular 11-Pin Octal Socket Receptacle */}
+          <circle cx={cx} cy={cy} r={11.8} fill="#ffffff" stroke="#1e293b" strokeWidth={0.75} />
+          {/* Center keyway hole */}
+          <circle cx={cx} cy={cy} r={4.5} fill="#e2e8f0" stroke="#334155" strokeWidth={0.6} />
+          <rect x={cx - 0.9} y={cy - 5.2} width={1.8} height={1.8} fill="#e2e8f0" stroke="#334155" strokeWidth={0.45} />
+          {/* 11 circular pin holes arranged evenly around the receptacle */}
+          {Array.from({ length: 11 }).map((_, idx) => {
+            const angle = ((idx * 360) / 11 - 90 + 16.36) * (Math.PI / 180);
+            const px = cx + Math.cos(angle) * 8.1;
+            const py = cy + Math.sin(angle) * 8.1;
+            return (
+              <circle
+                key={`mk3-hole-${idx}`}
+                cx={px}
+                cy={py}
+                r={1.35}
+                fill="#1e293b"
+                stroke="#475569"
+                strokeWidth={0.35}
+              />
+            );
+          })}
         </g>
       ) : id === "plc-compact" ? (
         <g>
@@ -609,30 +720,49 @@ export function ComponentSvg2D({
           )}
         </g>
       ) : id === "pilot-lamp-red" || id === "pilot-lamp-green" || id === "pilot-lamp-yellow" ? (
-        <g>
-          {/* Outer Metallic Bezel */}
-          <circle cx={cx} cy={cy} r={Math.min(w, h) * 0.48} fill="#e2e8f0" stroke={strokeMain} strokeWidth={0.85} />
-          {/* Inner Fresnel Lens Ring */}
-          <circle cx={cx} cy={cy} r={Math.min(w, h) * 0.36} fill="#ffffff" stroke="#334155" strokeWidth={0.65} />
-          {/* IEC Lamp Cross Symbol */}
-          <line x1={cx - 6} y1={cy - 6} x2={cx + 6} y2={cy + 6} stroke="#475569" strokeWidth={0.65} />
-          <line x1={cx + 6} y1={cy - 6} x2={cx - 6} y2={cy + 6} stroke="#475569" strokeWidth={0.65} />
-          {/* Clean Monochrome Color Code Letter (R / G / Y) */}
-          <circle cx={cx} cy={cy} r={4.2} fill="#f8fafc" stroke="#334155" strokeWidth={0.45} />
-          <text
-            x={cx}
-            y={cy + 0.3}
-            textAnchor="middle"
-            dominantBaseline="central"
-            fontSize={4.8}
-            fontFamily="system-ui, sans-serif"
-            fontWeight={700}
-            fill="#0f172a"
-            className="pointer-events-none select-none"
-          >
-            {id === "pilot-lamp-red" ? "R" : id === "pilot-lamp-green" ? "G" : "Y"}
-          </text>
-        </g>
+        (() => {
+          const lampTint =
+            id === "pilot-lamp-red"
+              ? { fill: "#fee2e2", stroke: "#ef4444", text: "#991b1b", code: "R" }
+              : id === "pilot-lamp-green"
+                ? { fill: "#dcfce7", stroke: "#22c55e", text: "#166534", code: "G" }
+                : { fill: "#fef9c3", stroke: "#eab308", text: "#854d0e", code: "Y" };
+          return (
+            <g>
+              {/* Outer Metallic Bezel */}
+              <circle cx={cx} cy={cy} r={Math.min(w, h) * 0.48} fill="#e2e8f0" stroke={strokeMain} strokeWidth={0.85} />
+              {/* Inner Fresnel Lens Ring (Subtle Translucent Tint) */}
+              <circle
+                cx={cx}
+                cy={cy}
+                r={Math.min(w, h) * 0.36}
+                fill={lampTint.fill}
+                fillOpacity={0.8}
+                stroke={lampTint.stroke}
+                strokeOpacity={0.75}
+                strokeWidth={0.7}
+              />
+              {/* IEC Lamp Cross Symbol */}
+              <line x1={cx - 6} y1={cy - 6} x2={cx + 6} y2={cy + 6} stroke={lampTint.stroke} strokeOpacity={0.5} strokeWidth={0.65} />
+              <line x1={cx + 6} y1={cy - 6} x2={cx - 6} y2={cy + 6} stroke={lampTint.stroke} strokeOpacity={0.5} strokeWidth={0.65} />
+              {/* Clean Color Code Letter (R / G / Y) */}
+              <circle cx={cx} cy={cy} r={4.2} fill="#ffffff" fillOpacity={0.88} stroke={lampTint.stroke} strokeOpacity={0.6} strokeWidth={0.45} />
+              <text
+                x={cx}
+                y={cy + 0.3}
+                textAnchor="middle"
+                dominantBaseline="central"
+                fontSize={4.8}
+                fontFamily="system-ui, sans-serif"
+                fontWeight={700}
+                fill={lampTint.text}
+                className="pointer-events-none select-none"
+              >
+                {lampTint.code}
+              </text>
+            </g>
+          );
+        })()
       ) : id === "push-button" ? (
         <g>
           <circle cx={cx} cy={cy} r={Math.min(w, h) * 0.48} fill="#cbd5e1" stroke={strokeMain} strokeWidth={0.85} />

@@ -61,7 +61,10 @@ function Wires3D({
     return wires
       .map((w) => {
         const p1 = pinMap.get(`${w.fromComponentId}:${w.fromPinId}`);
-        const p2 = pinMap.get(`${w.toComponentId}:${w.toPinId}`);
+        const p2 =
+          p1 && w.toFreePoint
+            ? new THREE.Vector3(w.toFreePoint.xMm, w.toFreePoint.yMm, p1.z)
+            : pinMap.get(`${w.toComponentId}:${w.toPinId}`);
         if (!p1 || !p2) return null;
 
         const liftZ = Math.max(p1.z, p2.z) + 18;

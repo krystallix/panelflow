@@ -173,12 +173,12 @@ export function computeDoorCutouts(
       c.templateId === "e-stop" ||
       c.templateId === "selector-3pos"
     ) {
-      // Standard 22.5mm hole for Ø22mm pilot devices
+      // Standard Ø22mm cutout hole for pilot lamps and switches
       const hole: DoorHoleSpec = {
         xMm: cx,
         yMm: cy,
-        diameterMm: 22.5,
-        label: "Ø22.5 mm",
+        diameterMm: 22,
+        label: "Ø22 mm",
         sourceName: c.name,
       };
       allHoles.push(hole);
@@ -189,11 +189,11 @@ export function computeDoorCutouts(
         kind: "circle",
         centerXMm: cx,
         centerYMm: cy,
-        widthMm: 22.5,
-        heightMm: 22.5,
-        mainDiameterMm: 22.5,
+        widthMm: 22,
+        heightMm: 22,
+        mainDiameterMm: 22,
         holes: [hole],
-        label: "Ø22.5 mm",
+        label: "Ø22 mm",
       });
     } else if (c.templateId === "panel-meter-96") {
       // 96x96mm bezel meter requires 92x92mm square cutout

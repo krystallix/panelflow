@@ -117,11 +117,11 @@ describe("door-cutout engine", () => {
     expect(spec.doorHeightMm).toBe(800);
     expect(spec.cutouts).toHaveLength(4);
 
-    // Lamp Ø22.5mm
+    // Lamp Ø22mm
     const lampCutout = spec.cutouts.find((c) => c.componentId === "lamp-r1");
     expect(lampCutout).toBeDefined();
     expect(lampCutout?.kind).toBe("circle");
-    expect(lampCutout?.mainDiameterMm).toBe(22.5);
+    expect(lampCutout?.mainDiameterMm).toBe(22);
     // xMm = -100 + 300 = 200, yMm = 200 + 400 = 600
     expect(lampCutout?.centerXMm).toBe(200);
     expect(lampCutout?.centerYMm).toBe(600);

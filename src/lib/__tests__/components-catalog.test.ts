@@ -15,8 +15,10 @@ describe("monochrome CAD components-catalog", () => {
     // Control & Automation
     "contactor",
     "tor",
-    "relay",
-    "timer-relay",
+    "contactor-st10",
+    "tor-tht18",
+    "relay-socket-my4n",
+    "relay-socket-mk3p",
     "plc-compact",
     "vfd-15kw",
     // Power & Distribution
@@ -73,12 +75,36 @@ describe("monochrome CAD components-catalog", () => {
     expect(COMPONENT_CATALOG["mccb-100a"].mountingType).toBe("screw_plate");
     expect(COMPONENT_CATALOG["mccb-100a"].behavior?.clearanceMm?.top).toBe(30);
 
-    // TeSys LC1D09 Contactor & LRD10 TOR
+    // TeSys LC1D09 Contactor & LRD08 TOR
+    expect(COMPONENT_CATALOG.contactor.name).toContain("LC1D09");
     expect(COMPONENT_CATALOG.contactor.widthMm).toBe(45);
     expect(COMPONENT_CATALOG.contactor.heightMm).toBe(77);
     expect(COMPONENT_CATALOG.contactor.depthMm).toBe(86);
+    expect(COMPONENT_CATALOG.tor.name).toContain("LRD08");
     expect(COMPONENT_CATALOG.tor.mountingType).toBe("parent_mount");
     expect(COMPONENT_CATALOG.tor.behavior?.mountTargetTemplateIds).toContain("contactor");
+
+    // Mitsubishi S-T10 Contactor & TH-T18 TOR
+    const st10 = COMPONENT_CATALOG["contactor-st10"];
+    expect(st10.widthMm).toBe(36);
+    expect(st10.heightMm).toBe(75);
+    expect(st10.depthMm).toBe(78);
+    expect(st10.pins.map((p) => p.label)).toEqual([
+      "A2", "A1",
+      "1/L1", "3/L2", "5/L3", "13NO",
+      "2/T1", "4/T2", "6/T3", "14NO",
+    ]);
+
+    const tht18 = COMPONENT_CATALOG["tor-tht18"];
+    expect(tht18.widthMm).toBe(46);
+    expect(tht18.heightMm).toBe(42);
+    expect(tht18.depthMm).toBe(76.5);
+    expect(tht18.mountingType).toBe("parent_mount");
+    expect(tht18.behavior?.mountTargetTemplateIds).toContain("contactor-st10");
+    expect(tht18.pins.map((p) => p.label)).toEqual([
+      "98", "97", "95",
+      "2/T1", "4/T2", "6/T3", "96",
+    ]);
 
     // Siemens S7-1200 CPU 1214C
     const plc = COMPONENT_CATALOG["plc-compact"];
@@ -119,5 +145,32 @@ describe("monochrome CAD components-catalog", () => {
     expect(COMPONENT_CATALOG["panel-meter-96"].heightMm).toBe(96);
     expect(COMPONENT_CATALOG["cooling-fan-120"].widthMm).toBe(120);
     expect(COMPONENT_CATALOG["cooling-fan-120"].heightMm).toBe(120);
+
+    // Relay Sockets Only (MY4N 14-Pin PYF14A & MK3P 11-Pin PF113A)
+    const my4n = COMPONENT_CATALOG["relay-socket-my4n"];
+    expect(my4n.widthMm).toBe(30);
+    expect(my4n.heightMm).toBe(72);
+    expect(my4n.depthMm).toBe(30);
+    expect(my4n.mountingType).toBe("din_rail");
+    expect(my4n.pins).toHaveLength(14);
+    expect(my4n.pins.map((p) => p.label)).toEqual([
+      "1", "2", "3", "4",
+      "5", "6", "7", "8",
+      "9", "10", "11", "12",
+      "13", "14",
+    ]);
+
+    const mk3p = COMPONENT_CATALOG["relay-socket-mk3p"];
+    expect(mk3p.widthMm).toBe(42.7);
+    expect(mk3p.heightMm).toBe(51);
+    expect(mk3p.depthMm).toBe(27);
+    expect(mk3p.mountingType).toBe("din_rail");
+    expect(mk3p.pins).toHaveLength(11);
+    expect(mk3p.pins.map((p) => p.label)).toEqual([
+      "2", "1", "11", "10",
+      "3", "9",
+      "4",
+      "5", "6", "7", "8",
+    ]);
   });
 });

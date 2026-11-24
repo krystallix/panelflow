@@ -189,9 +189,8 @@ function CadAssetItem3D({
         </>
       )}
 
-      {/* Render 3D Solid Geometry for Custom Drawn Busbar / Plate */}
-      {asset.materialType && !loadedObject && !dxfGeometry && (() => {
-        const mat = MATERIAL_PRESETS[asset.materialType] || MATERIAL_PRESETS.copper;
+      {/* Render 3D Solid Geometry for Custom Drawn Shape (Uniform Monochrome Light Gray) */}
+      {(asset.materialType || asset.drawShape) && !loadedObject && !dxfGeometry && (() => {
         const w = Math.max(2, asset.boundingBoxMm.w);
         const h = Math.max(2, asset.boundingBoxMm.h);
         const d = Math.max(2, asset.boundingBoxMm.d);
@@ -201,9 +200,9 @@ function CadAssetItem3D({
             <mesh>
               <cylinderGeometry args={[w / 2, w / 2, d, 32]} />
               <meshStandardMaterial
-                color={mat.fillColor}
-                metalness={mat.metalness}
-                roughness={mat.roughness}
+                color="#f1f5f9"
+                metalness={0.12}
+                roughness={0.42}
               />
             </mesh>
           );
@@ -213,9 +212,9 @@ function CadAssetItem3D({
           <mesh>
             <boxGeometry args={[w, h, d]} />
             <meshStandardMaterial
-              color={mat.fillColor}
-              metalness={mat.metalness}
-              roughness={mat.roughness}
+              color="#f1f5f9"
+              metalness={0.12}
+              roughness={0.42}
             />
           </mesh>
         );

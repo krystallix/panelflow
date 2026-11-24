@@ -210,7 +210,7 @@ export function EnclosureDoor2D({
                 <circle
                   cx={cx}
                   cy={cy}
-                  r={(item.mainDiameterMm || 22.5) / 2}
+                  r={(item.mainDiameterMm || 22) / 2}
                   fill={isDark ? "#171a21" : "#ffffff"}
                   stroke="#ef4444"
                   strokeWidth={1.2}
@@ -371,7 +371,7 @@ export function EnclosureDoor2D({
                 <circle
                   cx={cx}
                   cy={cy}
-                  r={(item.mainDiameterMm || 22.5) / 2}
+                  r={(item.mainDiameterMm || 22) / 2}
                   fill="none"
                   stroke="#94a3b8"
                   strokeWidth={0.6}

@@ -77,7 +77,7 @@ function PartVectorIcon({
   if (!tpl) return null;
 
   const pad = 4;
-  const padTop = tpl.id === "tor" ? 12 : pad;
+  const padTop = tpl.mountingType === "parent_mount" ? 12 : pad;
   const vh = tpl.heightMm + padTop + pad;
   const vw = Math.max(tpl.widthMm + pad * 2, vh * 0.55);
   const vx = (tpl.widthMm - vw) / 2;
@@ -173,18 +173,16 @@ export function LeftSidebar() {
   const cadAssets = usePanelStore((s) => s.cadAssets);
   const [torNotice, setTorNotice] = useState<string | null>(null);
 
-  const hasAvailableContactor = useMemo(
-    () =>
-      components.some(
-        (c) =>
-          c.templateId === "contactor" &&
-          !components.some(
-            (other) =>
-              other.templateId === "tor" && other.mountedToComponentId === c.id
-          )
-      ),
-    [components]
-  );
+  const hasAvailableMountParent = (templateId: ComponentTemplateId) => {
+    const tpl = COMPONENT_CATALOG[templateId];
+    if (!tpl || tpl.mountingType !== "parent_mount") return true;
+    const targets = tpl.behavior?.mountTargetTemplateIds ?? ["contactor"];
+    return components.some(
+      (c) =>
+        targets.includes(c.templateId) &&
+        !components.some((other) => other.mountedToComponentId === c.id)
+    );
+  };
   const selected = usePanelStore((s) => s.selected);
   const isPinMarkingMode = usePanelStore((s) => s.isPinMarkingMode);
   const activeMarkingAssetId = usePanelStore((s) => s.activeMarkingAssetId);
@@ -362,9 +360,11 @@ export function LeftSidebar() {
     e: React.DragEvent,
     templateId: ComponentTemplateId
   ) => {
-    if (templateId === "tor" && !hasAvailableContactor) {
+    if (!hasAvailableMountParent(templateId)) {
       e.preventDefault();
-      setTorNotice("TOR harus dipasang pada Contactor. Tambahkan Contactor dulu.");
+      const targetName =
+        templateId === "tor-tht18" ? "Contactor Mitsubishi S-T10" : "Contactor Schneider LC1D09";
+      setTorNotice(`TOR harus dipasang pada ${targetName}. Tambahkan kontaktornya dulu.`);
       setTimeout(() => setTorNotice(null), 2600);
       return;
     }
@@ -441,8 +441,10 @@ export function LeftSidebar() {
   ];
 
   const handleAddComponent = (templateId: ComponentTemplateId) => {
-    if (templateId === "tor" && !hasAvailableContactor) {
-      setTorNotice("TOR harus dipasang pada Contactor. Tambahkan Contactor dulu.");
+    if (!hasAvailableMountParent(templateId)) {
+      const targetName =
+        templateId === "tor-tht18" ? "Contactor Mitsubishi S-T10" : "Contactor Schneider LC1D09";
+      setTorNotice(`TOR harus dipasang pada ${targetName}. Tambahkan kontaktornya dulu.`);
       setTimeout(() => setTorNotice(null), 2600);
       return;
     }

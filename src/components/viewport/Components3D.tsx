@@ -253,36 +253,134 @@ function ComponentDetail3D({ comp }: { comp: PlacedComponent }) {
     );
   }
 
-  // ── Relay & Timer Relay ───────────────────────────────────────────────────
-  if (id === "relay" || id === "timer-relay") {
+  // ── Mitsubishi S-T10 Contactor (36 × 75 × 78 mm) ──────────────────────────
+  if (id === "contactor-st10") {
     return (
       <group>
-        <mesh position={[0, 0, frontZ + 2]} castShadow>
-          <boxGeometry args={[w * 0.84, h * 0.56, 4]} />
-          <meshStandardMaterial
-            color="#ffffff"
-            transparent={id === "relay"}
-            opacity={id === "relay" ? 0.72 : 1}
-            roughness={0.25}
-          />
+        {/* Top Coil Block */}
+        <mesh position={[0, h / 2 - 7.5, frontZ - 2]} castShadow>
+          <boxGeometry args={[w * 0.82, 13, 8]} />
+          <meshStandardMaterial color="#e2e8f0" roughness={0.45} />
         </mesh>
-        {id === "timer-relay" ? (
-          <>
-            <mesh position={[0, 8, frontZ + 4.5]} rotation={[Math.PI / 2, 0, 0]}>
-              <cylinderGeometry args={[4.5, 4.5, 1.4, 18]} />
-              <meshStandardMaterial color="#e2e8f0" roughness={0.35} />
-            </mesh>
-            <mesh position={[0, -5, frontZ + 4.5]} rotation={[Math.PI / 2, 0, 0]}>
-              <cylinderGeometry args={[4.5, 4.5, 1.4, 18]} />
-              <meshStandardMaterial color="#e2e8f0" roughness={0.35} />
-            </mesh>
-          </>
-        ) : (
-          <mesh position={[0, 2, frontZ + 1.4]}>
-            <boxGeometry args={[w * 0.44, 14, 2.4]} />
-            <meshStandardMaterial color="#64748b" metalness={0.55} roughness={0.35} />
+        {/* Upper & Lower 4-Pole Terminal Decks */}
+        <mesh position={[0, 14, frontZ + 2]} castShadow>
+          <boxGeometry args={[w * 0.96, 13, 4]} />
+          <meshStandardMaterial color="#f1f5f9" roughness={0.44} />
+        </mesh>
+        <mesh position={[0, -28, frontZ + 2]} castShadow>
+          <boxGeometry args={[w * 0.96, 14, 4]} />
+          <meshStandardMaterial color="#f1f5f9" roughness={0.44} />
+        </mesh>
+        {/* Central Raised Faceplate & Vertical Plunger */}
+        <mesh position={[0, -7, frontZ + 4.5]} castShadow>
+          <boxGeometry args={[w * 0.9, 25, 7]} />
+          <meshStandardMaterial color="#ffffff" roughness={0.38} />
+        </mesh>
+        <mesh position={[0, -6.5, frontZ + 8.6]}>
+          <boxGeometry args={[5.5, 10, 2]} />
+          <meshStandardMaterial color="#1e293b" roughness={0.35} />
+        </mesh>
+        <TerminalScrews3D comp={comp} />
+      </group>
+    );
+  }
+
+  // ── Mitsubishi TH-T18 Thermal Overload Relay (46 × 42 × 76.5 mm) ──────────
+  if (id === "tor-tht18") {
+    return (
+      <group>
+        {/* 3 Metallic Plug-In Prongs extending upward into S-T10 */}
+        {[-12.5, -4.2, 4.2].map((pxOff, idx) => (
+          <mesh key={`th18-prong3d-${idx}`} position={[pxOff, h / 2 + 5.5, frontZ - 14]}>
+            <cylinderGeometry args={[1.25, 1.25, 12, 12]} />
+            <meshStandardMaterial color="#cbd5e1" metalness={0.78} roughness={0.24} />
           </mesh>
-        )}
+        ))}
+        {/* Upper Dark Control Deck */}
+        <mesh position={[0, 11.5, frontZ + 2.5]} castShadow>
+          <boxGeometry args={[w * 0.94, 15, 5]} />
+          <meshStandardMaterial color="#334155" roughness={0.45} />
+        </mesh>
+        {/* Reset Bar Button */}
+        <mesh position={[-7, 11.5, frontZ + 6]}>
+          <boxGeometry args={[10, 6, 3]} />
+          <meshStandardMaterial color="#64748b" roughness={0.38} />
+        </mesh>
+        {/* Ampere Setting Dial */}
+        <mesh position={[8.5, 11.5, frontZ + 5.8]} rotation={[Math.PI / 2, 0, 0]}>
+          <cylinderGeometry args={[6, 6, 2.2, 18]} />
+          <meshStandardMaterial color="#f8fafc" roughness={0.32} />
+        </mesh>
+        {/* Middle Raised Aux Terminal Block (98, 97, 95) */}
+        <mesh position={[-4.5, -2, frontZ + 3.5]} castShadow>
+          <boxGeometry args={[w * 0.78, 10.5, 5]} />
+          <meshStandardMaterial color="#ffffff" roughness={0.4} />
+        </mesh>
+        <TerminalScrews3D comp={comp} />
+      </group>
+    );
+  }
+
+  // ── Relay Sockets Only (MY4N 14-Pin PYF14A & MK3P 11-Pin PF113A) ──────────
+  if (id === "relay-socket-my4n") {
+    return (
+      <group>
+        {/* Stepped upper & lower inner terminal decks */}
+        <mesh position={[0, 21.5, frontZ + 1.2]} castShadow>
+          <boxGeometry args={[w * 0.96, 8.5, 2.4]} />
+          <meshStandardMaterial color="#e2e8f0" roughness={0.5} />
+        </mesh>
+        <mesh position={[0, -21.5, frontZ + 1.2]} castShadow>
+          <boxGeometry args={[w * 0.96, 8.5, 2.4]} />
+          <meshStandardMaterial color="#e2e8f0" roughness={0.5} />
+        </mesh>
+        {/* Central flat 14-pin blade receptacle face (no relay body) */}
+        <mesh position={[0, 0, frontZ + 2.2]} castShadow>
+          <boxGeometry args={[w * 0.86, 31, 4.4]} />
+          <meshStandardMaterial color="#ffffff" roughness={0.42} />
+        </mesh>
+        {/* 14 female blade socket slots */}
+        {[-9, -3, 3, 9].map((rowY, rIdx) => {
+          const cols = rIdx === 3 ? [-7.5, 7.5] : [-8.4, -2.8, 2.8, 8.4];
+          return cols.map((colX, cIdx) => (
+            <mesh key={`my4s3d-${rIdx}-${cIdx}`} position={[colX, -rowY, frontZ + 4.5]}>
+              <boxGeometry args={[2, 2.8, 0.5]} />
+              <meshStandardMaterial color="#1e293b" roughness={0.6} />
+            </mesh>
+          ));
+        })}
+        <TerminalScrews3D comp={comp} />
+      </group>
+    );
+  }
+
+  if (id === "relay-socket-mk3p") {
+    return (
+      <group>
+        {/* Raised circular 11-pin octal socket receptacle (no relay body) */}
+        <mesh position={[0, 0, frontZ + 2]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+          <cylinderGeometry args={[11.8, 12.2, 4, 28]} />
+          <meshStandardMaterial color="#ffffff" roughness={0.42} />
+        </mesh>
+        {/* Center keyway hole */}
+        <mesh position={[0, 0, frontZ + 4.1]} rotation={[Math.PI / 2, 0, 0]}>
+          <cylinderGeometry args={[4.4, 4.4, 0.6, 20]} />
+          <meshStandardMaterial color="#334155" roughness={0.6} />
+        </mesh>
+        {/* 11 circular pin receptacles */}
+        {Array.from({ length: 11 }).map((_, idx) => {
+          const angle = ((idx * 360) / 11 - 90 + 16.36) * (Math.PI / 180);
+          return (
+            <mesh
+              key={`mk3h3d-${idx}`}
+              position={[Math.cos(angle) * 8.1, -Math.sin(angle) * 8.1, frontZ + 4.1]}
+              rotation={[Math.PI / 2, 0, 0]}
+            >
+              <cylinderGeometry args={[1.25, 1.25, 0.6, 12]} />
+              <meshStandardMaterial color="#1e293b" roughness={0.55} />
+            </mesh>
+          );
+        })}
         <TerminalScrews3D comp={comp} />
       </group>
     );
@@ -443,6 +541,22 @@ function ComponentDetail3D({ comp }: { comp: PlacedComponent }) {
           <mesh position={[0, 0, 6.2]} rotation={[Math.PI / 2, 0, 0]}>
             <cylinderGeometry args={[outerR * 0.65, outerR * 0.65, 2.4, 20]} />
             <meshStandardMaterial color="#94a3b8" metalness={0.8} roughness={0.25} />
+          </mesh>
+        ) : id === "pilot-lamp-red" || id === "pilot-lamp-green" || id === "pilot-lamp-yellow" ? (
+          <mesh position={[0, 0, 7.2]} rotation={[Math.PI / 2, 0, 0]} castShadow>
+            <cylinderGeometry args={[outerR * 0.72, outerR * 0.76, 4.5, 24]} />
+            <meshStandardMaterial
+              color={
+                id === "pilot-lamp-red"
+                  ? "#fca5a5"
+                  : id === "pilot-lamp-green"
+                    ? "#86efac"
+                    : "#fde047"
+              }
+              transparent
+              opacity={0.78}
+              roughness={0.22}
+            />
           </mesh>
         ) : (
           <mesh position={[0, 0, 7.2]} rotation={[Math.PI / 2, 0, 0]} castShadow>

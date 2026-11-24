@@ -33,12 +33,29 @@ import {
   Users,
   Zap,
   Cloud,
+  Check,
+  HelpCircle,
+  Keyboard,
   LogIn,
   LogOut,
+  Search,
   User as UserIcon,
+  X,
 } from "lucide-react";
-import { clearAutoSaveSession } from "@/lib/indexed-db";
-import { Button, Dropdown, DropdownItem, DropdownSeparator } from "@/components/ui";
+import {
+  clearAutoSaveSession,
+  saveAutoSaveSession,
+  saveLocalAutoSave,
+} from "@/lib/indexed-db";
+import {
+  Button,
+  Dropdown,
+  DropdownItem,
+  DropdownSeparator,
+  Modal,
+  ModalBody,
+  ModalHeader,
+} from "@/components/ui";
 import { useAuthStore } from "@/store/useAuthStore";
 import {
   parseAndValidatePflow,
@@ -108,6 +125,8 @@ export function TopToolbar() {
   const setDoorMode = usePanelStore((s) => s.setDoorMode);
   const addSheet = usePanelStore((s) => s.addSheet);
   const rightPanelTab = usePanelStore((s) => s.rightPanelTab);
+  const rightInspectorOpen = usePanelStore((s) => s.rightInspectorOpen);
+  const toggleRightInspector = usePanelStore((s) => s.toggleRightInspector);
   const setRightPanelTab = usePanelStore((s) => s.setRightPanelTab);
   const leftSidebarOpen = usePanelStore((s) => s.leftSidebarOpen);
   const toggleLeftSidebar = usePanelStore((s) => s.toggleLeftSidebar);
@@ -118,6 +137,68 @@ export function TopToolbar() {
   const logout = useAuthStore((s) => s.logout);
   const syncStatus = useAuthStore((s) => s.syncStatus);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [shortcutsQuery, setShortcutsQuery] = useState("");
+  const [isLocalSynced, setIsLocalSynced] = useState(true);
+
+  const handleSaveToLocalStorage = useCallback(() => {
+    const s = usePanelStore.getState();
+    saveLocalAutoSave(s.sheets, s.activeSheetId, {
+      displayUnit: s.displayUnit,
+      gridSnapMm: s.gridSnapMm,
+      autoRouteDuctsEnabled: s.autoRouteDuctsEnabled,
+      showPinLabels: s.showPinLabels,
+      titleBlock: s.titleBlock,
+    });
+    saveAutoSaveSession(s.sheets, s.activeSheetId, {
+      displayUnit: s.displayUnit,
+      gridSnapMm: s.gridSnapMm,
+      autoRouteDuctsEnabled: s.autoRouteDuctsEnabled,
+      showPinLabels: s.showPinLabels,
+      titleBlock: s.titleBlock,
+    }).catch(() => {
+      // ignore IndexedDB errors
+    });
+    setIsLocalSynced(true);
+    window.dispatchEvent(new CustomEvent("panelflow:local-saved"));
+  }, []);
+
+  useEffect(() => {
+    const unsub = usePanelStore.subscribe((state, prevState) => {
+      const changed =
+        state.sheets !== prevState.sheets ||
+        state.activeSheetId !== prevState.activeSheetId ||
+        state.titleBlock !== prevState.titleBlock ||
+        state.displayUnit !== prevState.displayUnit ||
+        state.gridSnapMm !== prevState.gridSnapMm ||
+        state.autoRouteDuctsEnabled !== prevState.autoRouteDuctsEnabled ||
+        state.showPinLabels !== prevState.showPinLabels;
+      if (changed) {
+        setIsLocalSynced(false);
+      }
+    });
+    const onLocalSaved = () => setIsLocalSynced(true);
+    const onGlobalKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        handleSaveToLocalStorage();
+        return;
+      }
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (e.key === "?" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        setShortcutsOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener("panelflow:local-saved", onLocalSaved);
+    window.addEventListener("keydown", onGlobalKeyDown);
+    return () => {
+      unsub();
+      window.removeEventListener("panelflow:local-saved", onLocalSaved);
+      window.removeEventListener("keydown", onGlobalKeyDown);
+    };
+  }, [handleSaveToLocalStorage]);
 
   const [activeMenu, setActiveMenu] = useState<"file" | "edit" | "view" | "mobile" | null>(
     null
@@ -1166,6 +1247,58 @@ export function TopToolbar() {
           {renderTooltip("Auto-Number Wires (Ctrl+Shift+N)")}
         </div>
 
+        {/* Keyboard Shortcuts Cheat Sheet Button */}
+        <div className="relative group/tip hidden sm:block">
+          <button
+            type="button"
+            onClick={() => setShortcutsOpen(true)}
+            aria-label="Keyboard Shortcuts (?)"
+            className="p-2 rounded-xl transition-colors cursor-pointer bg-white hover:bg-slate-100 text-slate-800 dark:bg-[#131620] dark:hover:bg-[#1c202e] dark:text-zinc-200 dark:hover:text-white"
+          >
+            <HelpCircle className="h-4 w-4" />
+          </button>
+          {renderTooltip("Keyboard Shortcuts (?)")}
+        </div>
+
+        {/* Right Inspector SideSheet Toggle Button (RelayTest style) */}
+        <div className="relative group/tip">
+          <button
+            type="button"
+            onClick={toggleRightInspector}
+            aria-label="Panel Inspector & BOM"
+            className={`p-2 rounded-xl transition-colors cursor-pointer ${
+              rightInspectorOpen
+                ? "bg-slate-900 text-white dark:bg-white dark:text-black"
+                : "bg-white hover:bg-slate-100 text-slate-800 dark:bg-[#131620] dark:hover:bg-[#1c202e] dark:text-zinc-200 dark:hover:text-white"
+            }`}
+          >
+            <Sliders className="h-4 w-4" />
+          </button>
+          {renderTooltip("Panel Inspector & BOM")}
+        </div>
+
+        {/* Save to LocalStorage Sync Icon Button (left of Dark Mode) */}
+        <div className="relative group/tip">
+          <button
+            type="button"
+            onClick={handleSaveToLocalStorage}
+            aria-label={isLocalSynced ? "Saved to LocalStorage" : "Save to LocalStorage"}
+            className="relative p-2 rounded-xl transition-colors cursor-pointer bg-white hover:bg-slate-100 text-slate-800 dark:bg-[#131620] dark:hover:bg-[#1c202e] dark:text-zinc-200 dark:hover:text-white"
+          >
+            <span className="relative flex h-4 w-4 items-center justify-center">
+              <Cloud className="h-4 w-4" />
+              {isLocalSynced && (
+                <span className="absolute -bottom-0.5 -right-1 flex h-2.5 w-2.5 items-center justify-center rounded-full bg-white dark:bg-[#131620]">
+                  <Check className="h-2.5 w-2.5 stroke-[3] text-emerald-500" />
+                </span>
+              )}
+            </span>
+          </button>
+          {renderTooltip(
+            isLocalSynced ? "Saved to LocalStorage (Synced)" : "Save to LocalStorage"
+          )}
+        </div>
+
         {/* Theme Toggle Icon Button (Borderless) */}
         <div className="relative group/tip hidden sm:block">
           <button
@@ -1263,6 +1396,104 @@ export function TopToolbar() {
         onChange={handleOpenPflowFile}
         className="hidden"
       />
+      {shortcutsOpen && (
+        <Modal
+          isOpen={shortcutsOpen}
+          onClose={() => {
+            setShortcutsOpen(false);
+            setShortcutsQuery("");
+          }}
+          maxWidthClassName="max-w-md"
+        >
+          <ModalHeader
+            title="Keyboard Shortcuts"
+            subtitle="Navigasi & aksi cepat PanelFlow"
+            icon={<Keyboard className="h-4 w-4 text-slate-600 dark:text-zinc-400" />}
+            onClose={() => {
+              setShortcutsOpen(false);
+              setShortcutsQuery("");
+            }}
+          />
+          <ModalBody>
+            {/* Search Shortcuts Input */}
+            <div className="relative flex items-center">
+              <Search className="pointer-events-none absolute left-3 h-3.5 w-3.5 text-slate-400 dark:text-zinc-500" />
+              <input
+                type="text"
+                autoFocus
+                placeholder="Cari shortcut (misal: lock, group, save, wire)..."
+                value={shortcutsQuery}
+                onChange={(e) => setShortcutsQuery(e.target.value)}
+                onKeyDown={(e) => e.stopPropagation()}
+                className="w-full rounded-lg border border-slate-200 dark:border-white/15 bg-slate-50 dark:bg-[#0d111a] pl-8 pr-8 py-2 text-xs text-slate-900 dark:text-zinc-100 placeholder:text-slate-400 dark:placeholder:text-zinc-500 outline-none focus:border-slate-900 dark:focus:border-white/30 transition-colors select-text"
+              />
+              {shortcutsQuery && (
+                <button
+                  type="button"
+                  onClick={() => setShortcutsQuery("")}
+                  aria-label="Clear search"
+                  className="absolute right-2.5 p-0.5 rounded text-slate-400 hover:text-slate-700 dark:hover:text-white cursor-pointer"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+
+            {(() => {
+              const allShortcuts: Array<[string, string, string]> = [
+                ["Save ke LocalStorage", "Ctrl / Cmd + S", "simpan sync cloud"],
+                ["Undo / Redo", "Ctrl + Z / Ctrl + Y", "kembali batal history"],
+                ["Group Item Terpilih", "Ctrl + G", "gabung kelompok"],
+                ["Ungroup Item Terpilih", "Ctrl + Shift + G", "pisah kelompok"],
+                ["Lock / Unlock Item", "Ctrl / Cmd + L", "kunci buka"],
+                ["Rotate +90°", "R", "putar komponen"],
+                ["Duplicate / Copy / Paste", "Ctrl + D / C / V", "salin tempel duplikat"],
+                ["Multi-Select", "Shift + Click / Drag Box", "pilih banyak"],
+                ["Geser Halus (Nudge 1mm / 5mm)", "Arrow / Shift + Arrow", "panah pindah"],
+                ["Pan Canvas", "Space + Drag / Middle Click", "geser layar"],
+                ["Tarik Kabel Free-End", "Double-Click Canvas / Duct", "wire circle terminal"],
+                ["Batal Wiring / Clear Selection", "Esc / Klik Kanan", "cancel"],
+                ["Auto-Number Wires", "Ctrl + Shift + N", "nomor kabel"],
+                ["Hapus Item Terpilih", "Delete / Backspace", "remove hapus"],
+                ["Buka Panduan Shortcut", "?", "help bantuan"],
+              ];
+              const q = shortcutsQuery.trim().toLowerCase();
+              const filtered = q
+                ? allShortcuts.filter(
+                    ([label, keys, tags]) =>
+                      label.toLowerCase().includes(q) ||
+                      keys.toLowerCase().includes(q) ||
+                      tags.includes(q)
+                  )
+                : allShortcuts;
+
+              if (filtered.length === 0) {
+                return (
+                  <div className="py-8 text-center text-xs text-slate-400 dark:text-zinc-500">
+                    Tidak ada shortcut yang cocok dengan &ldquo;{shortcutsQuery}&rdquo;
+                  </div>
+                );
+              }
+
+              return (
+                <div className="max-h-[52vh] overflow-y-auto pr-0.5 grid grid-cols-1 gap-1.5 text-xs">
+                  {filtered.map(([label, keys]) => (
+                    <div
+                      key={label}
+                      className="flex items-center justify-between gap-2 rounded-lg border border-slate-200/80 dark:border-white/10 bg-slate-50/70 dark:bg-white/[0.03] px-3 py-1.5"
+                    >
+                      <span className="text-slate-700 dark:text-zinc-300">{label}</span>
+                      <kbd className="shrink-0 rounded bg-white dark:bg-[#0d111a] border border-slate-200 dark:border-white/15 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-slate-800 dark:text-zinc-200">
+                        {keys}
+                      </kbd>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+          </ModalBody>
+        </Modal>
+      )}
     </header>
   );
 }

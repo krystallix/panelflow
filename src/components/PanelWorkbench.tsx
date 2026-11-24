@@ -188,15 +188,27 @@ export function PanelWorkbench() {
 
         if (idbTimer) clearTimeout(idbTimer);
         idbTimer = setTimeout(() => {
-          saveAutoSaveSession(state.sheets, state.activeSheetId, {
-            displayUnit: state.displayUnit,
-            gridSnapMm: state.gridSnapMm,
-            autoRouteDuctsEnabled: state.autoRouteDuctsEnabled,
-            showPinLabels: state.showPinLabels,
-            titleBlock: state.titleBlock,
-          }).catch(() => {
-            // ignore storage quota errors
+          const latest = usePanelStore.getState();
+          saveLocalAutoSave(latest.sheets, latest.activeSheetId, {
+            displayUnit: latest.displayUnit,
+            gridSnapMm: latest.gridSnapMm,
+            autoRouteDuctsEnabled: latest.autoRouteDuctsEnabled,
+            showPinLabels: latest.showPinLabels,
+            titleBlock: latest.titleBlock,
           });
+          saveAutoSaveSession(latest.sheets, latest.activeSheetId, {
+            displayUnit: latest.displayUnit,
+            gridSnapMm: latest.gridSnapMm,
+            autoRouteDuctsEnabled: latest.autoRouteDuctsEnabled,
+            showPinLabels: latest.showPinLabels,
+            titleBlock: latest.titleBlock,
+          })
+            .catch(() => {
+              // ignore storage quota errors
+            })
+            .finally(() => {
+              window.dispatchEvent(new CustomEvent("panelflow:local-saved"));
+            });
         }, 400);
 
         const auth = useAuthStore.getState();

@@ -135,7 +135,8 @@ export function computeWireRouteLengthMm(
   fromPinId: string,
   toComponentId: string,
   toPinId: string,
-  waypoints?: Array<{ xMm: number; yMm: number }>
+  waypoints?: Array<{ xMm: number; yMm: number }>,
+  toFreePoint?: { xMm: number; yMm: number }
 ): number {
   if (waypoints && waypoints.length >= 2) {
     let total = 0;
@@ -154,12 +155,14 @@ export function computeWireRouteLengthMm(
     fromComponentId,
     fromPinId
   );
-  const toPt = resolvePinWorldPoint(
-    sheet.components,
-    sheet.cadAssets,
-    toComponentId,
-    toPinId
-  );
+  const toPt = toFreePoint
+    ? toFreePoint
+    : resolvePinWorldPoint(
+        sheet.components,
+        sheet.cadAssets,
+        toComponentId,
+        toPinId
+      );
 
   if (!fromPt || !toPt) return 0;
 
@@ -307,18 +310,24 @@ export function generateBomReport(
         wire.fromComponentId,
         wire.fromPinId
       );
-      const toResolved = resolveComponentAndPin(
-        sheet,
-        wire.toComponentId,
-        wire.toPinId
-      );
+      const toResolved = wire.toFreePoint
+        ? {
+            tag: wire.toFreeLabel?.trim() || "Free Terminal",
+            pinLabel: "END",
+          }
+        : resolveComponentAndPin(
+            sheet,
+            wire.toComponentId,
+            wire.toPinId
+          );
       const routeLengthMm = computeWireRouteLengthMm(
         sheet,
         wire.fromComponentId,
         wire.fromPinId,
         wire.toComponentId,
         wire.toPinId,
-        wire.waypoints
+        wire.waypoints,
+        wire.toFreePoint
       );
       const cutLengthMm = Number(
         (routeLengthMm + WIRE_STRIPPING_ALLOWANCE_MM).toFixed(1)
@@ -334,7 +343,9 @@ export function generateBomReport(
         fromDisplay: `${fromResolved.tag} : ${fromResolved.pinLabel}`,
         toTag: toResolved.tag,
         toPin: toResolved.pinLabel,
-        toDisplay: `${toResolved.tag} : ${toResolved.pinLabel}`,
+        toDisplay: wire.toFreePoint
+          ? toResolved.tag
+          : `${toResolved.tag} : ${toResolved.pinLabel}`,
         colorCode: wire.colorCode,
         gaugeMm2: wire.gaugeMm2,
         outerDiameterMm: getWireOuterDiameterMm(wire.gaugeMm2),

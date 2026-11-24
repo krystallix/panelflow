@@ -22,29 +22,56 @@ export function SheetTabs() {
   const renameSheet = usePanelStore((s) => s.renameSheet);
   const duplicateSheet = usePanelStore((s) => s.duplicateSheet);
   const deleteSheet = usePanelStore((s) => s.deleteSheet);
+  const reorderSheets = usePanelStore((s) => s.reorderSheets);
 
   const [editingSheetId, setEditingSheetId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
   const [showTypeMenu, setShowTypeMenu] = useState(false);
+  const [draggedSheetId, setDraggedSheetId] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<{
+    sheetId: string;
+    side: "before" | "after";
+  } | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    sheetId: string;
+    sheetName: string;
+    x: number;
+    y: number;
+  } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const contextMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!showTypeMenu) return;
+    if (!showTypeMenu && !contextMenu) return;
     const onPointerDown = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (showTypeMenu && menuRef.current && !menuRef.current.contains(target)) {
         setShowTypeMenu(false);
+      }
+      if (
+        contextMenu &&
+        contextMenuRef.current &&
+        !contextMenuRef.current.contains(target)
+      ) {
+        setContextMenu(null);
       }
     };
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setShowTypeMenu(false);
+      if (e.key === "Escape") {
+        setShowTypeMenu(false);
+        setContextMenu(null);
+      }
     };
+    const onWindowChange = () => setContextMenu(null);
     window.addEventListener("mousedown", onPointerDown);
     window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("resize", onWindowChange);
     return () => {
       window.removeEventListener("mousedown", onPointerDown);
       window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("resize", onWindowChange);
     };
-  }, [showTypeMenu]);
+  }, [showTypeMenu, contextMenu]);
 
   const startRename = (id: string, name: string) => {
     setEditingSheetId(id);
@@ -80,13 +107,87 @@ export function SheetTabs() {
           return (
             <div
               key={sheet.id}
+              draggable={!isEditing}
               onClick={() => setActiveSheet(sheet.id)}
-              className={`group flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1 transition-all cursor-pointer border ${
+              onDragStart={(e) => {
+                if (isEditing) {
+                  e.preventDefault();
+                  return;
+                }
+                setContextMenu(null);
+                setShowTypeMenu(false);
+                setDraggedSheetId(sheet.id);
+                e.dataTransfer.effectAllowed = "move";
+                e.dataTransfer.setData("text/plain", sheet.id);
+              }}
+              onDragOver={(e) => {
+                if (!draggedSheetId || draggedSheetId === sheet.id) return;
+                e.preventDefault();
+                e.dataTransfer.dropEffect = "move";
+                const rect = e.currentTarget.getBoundingClientRect();
+                const side: "before" | "after" =
+                  e.clientX < rect.left + rect.width / 2 ? "before" : "after";
+                if (
+                  dropTarget?.sheetId !== sheet.id ||
+                  dropTarget?.side !== side
+                ) {
+                  setDropTarget({ sheetId: sheet.id, side });
+                }
+              }}
+              onDragLeave={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+                  setDropTarget((prev) =>
+                    prev?.sheetId === sheet.id ? null : prev
+                  );
+                }
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                const sourceId =
+                  draggedSheetId ?? e.dataTransfer.getData("text/plain");
+                const fromIndex = sheets.findIndex((s) => s.id === sourceId);
+                const targetIndex = sheets.findIndex((s) => s.id === sheet.id);
+                if (fromIndex !== -1 && targetIndex !== -1 && fromIndex !== targetIndex) {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  const side: "before" | "after" =
+                    e.clientX < rect.left + rect.width / 2 ? "before" : "after";
+                  let toIndex = side === "after" ? targetIndex + 1 : targetIndex;
+                  if (fromIndex < toIndex) toIndex -= 1;
+                  reorderSheets(fromIndex, toIndex);
+                }
+                setDraggedSheetId(null);
+                setDropTarget(null);
+              }}
+              onDragEnd={() => {
+                setDraggedSheetId(null);
+                setDropTarget(null);
+              }}
+              onContextMenu={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setShowTypeMenu(false);
+                setContextMenu({
+                  sheetId: sheet.id,
+                  sheetName: sheet.name,
+                  x: e.clientX,
+                  y: e.clientY,
+                });
+              }}
+              className={`relative group flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1 transition-all cursor-pointer border ${
+                draggedSheetId === sheet.id ? "opacity-45" : ""
+              } ${
                 isActive
                   ? "border-[#e2e8f0] dark:border-white/15 bg-white dark:bg-[#171a21] text-[#0f172a] dark:text-white shadow-xs"
                   : "border-transparent bg-transparent text-[#64748b] dark:text-slate-400 hover:bg-[#e2e8f0]/60 dark:hover:bg-white/5 hover:text-[#0f172a] dark:hover:text-slate-200"
               }`}
+              title="Drag to reorder · Right-click for actions · Double-click to rename"
             >
+              {dropTarget?.sheetId === sheet.id && dropTarget.side === "before" && (
+                <span className="pointer-events-none absolute -left-1 top-1 bottom-1 w-0.5 rounded-full bg-sky-500" />
+              )}
+              {dropTarget?.sheetId === sheet.id && dropTarget.side === "after" && (
+                <span className="pointer-events-none absolute -right-1 top-1 bottom-1 w-0.5 rounded-full bg-sky-500" />
+              )}
               {getSheetIcon(sheet.sheetType)}
 
               {isEditing ? (
@@ -97,6 +198,7 @@ export function SheetTabs() {
                   onChange={(e) => setEditingName(e.target.value)}
                   onBlur={finishRename}
                   onKeyDown={(e) => {
+                    e.stopPropagation();
                     if (e.key === "Enter") finishRename();
                     if (e.key === "Escape") setEditingSheetId(null);
                   }}
@@ -109,49 +211,10 @@ export function SheetTabs() {
                     startRename(sheet.id, sheet.name);
                   }}
                   className="font-medium text-xs whitespace-nowrap"
-                  title="Double click to rename"
                 >
                   {sheet.name}
                 </span>
               )}
-
-              <div className="flex items-center space-x-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button
-                  type="button"
-                  title="Rename Sheet"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    startRename(sheet.id, sheet.name);
-                  }}
-                  className="rounded p-0.5 hover:bg-[#e2e8f0] dark:hover:bg-white/10 text-[#64748b] dark:text-slate-400 hover:text-[#0f172a] dark:hover:text-white"
-                >
-                  <Edit2 className="h-3 w-3" />
-                </button>
-                <button
-                  type="button"
-                  title="Duplicate Sheet"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    duplicateSheet(sheet.id);
-                  }}
-                  className="rounded p-0.5 hover:bg-[#e2e8f0] dark:hover:bg-white/10 text-[#64748b] dark:text-slate-400 hover:text-[#0f172a] dark:hover:text-white"
-                >
-                  <Copy className="h-3 w-3" />
-                </button>
-                {sheets.length > 1 && (
-                  <button
-                    type="button"
-                    title="Delete Sheet"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteSheet(sheet.id);
-                    }}
-                    className="rounded p-0.5 hover:bg-rose-100 dark:hover:bg-rose-950/60 text-[#94a3b8] dark:text-slate-500 hover:text-rose-600 dark:hover:text-rose-400"
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </button>
-                )}
-              </div>
             </div>
           );
         })}
@@ -207,6 +270,58 @@ export function SheetTabs() {
         Sheet {sheets.findIndex((s) => s.id === activeSheetId) + 1} of{" "}
         {sheets.length}
       </div>
+
+      {contextMenu && (
+        <div
+          ref={contextMenuRef}
+          style={{
+            left: `${Math.min(
+              contextMenu.x,
+              typeof window !== "undefined" ? window.innerWidth - 180 : contextMenu.x
+            )}px`,
+            bottom: `${
+              typeof window !== "undefined"
+                ? Math.max(12, window.innerHeight - contextMenu.y)
+                : 44
+            }px`,
+          }}
+          className="fixed z-50 w-44 rounded-xl border border-[#e2e8f0] dark:border-white/15 bg-white dark:bg-[#161a23] p-1 shadow-2xl text-xs"
+        >
+          <DropdownItem
+            icon={<Edit2 className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />}
+            onClick={() => {
+              startRename(contextMenu.sheetId, contextMenu.sheetName);
+              setContextMenu(null);
+            }}
+          >
+            Rename Sheet
+          </DropdownItem>
+          <DropdownItem
+            icon={<Copy className="h-3.5 w-3.5 text-slate-600 dark:text-zinc-400" />}
+            onClick={() => {
+              duplicateSheet(contextMenu.sheetId);
+              setContextMenu(null);
+            }}
+          >
+            Duplicate Sheet
+          </DropdownItem>
+          {sheets.length > 1 && (
+            <>
+              <div className="my-1 h-[1px] bg-slate-200 dark:bg-white/10" />
+              <DropdownItem
+                className="text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/50"
+                icon={<Trash2 className="h-3.5 w-3.5 text-rose-500 dark:text-rose-400" />}
+                onClick={() => {
+                  deleteSheet(contextMenu.sheetId);
+                  setContextMenu(null);
+                }}
+              >
+                Delete Sheet
+              </DropdownItem>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }

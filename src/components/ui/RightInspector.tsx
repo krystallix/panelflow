@@ -4,6 +4,7 @@ import {
   ClipboardList,
   Copy,
   Crop,
+  FileSpreadsheet,
   Layers,
   MapPin,
   RotateCcw,
@@ -14,6 +15,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { SideSheet, SideSheetHeader } from "@/components/ui";
 import { BomPanelTab } from "@/components/ui/BomPanelTab";
 import { ComponentsLayersTab } from "@/components/ui/ComponentsLayersTab";
 import { PanelSetupTab } from "@/components/ui/PanelSetupTab";
@@ -25,8 +27,6 @@ import { formatDim, fromMm, inputStepForUnit, toMm } from "@/lib/units";
 import { usePanelStore } from "@/store/usePanelStore";
 import {
   type CadLabelPosition,
-  type MaterialType,
-  MATERIAL_PRESETS,
 } from "@/types/panel";
 import { saveCustomCadToLibrary, updateCustomCadCloudId } from "@/lib/indexed-db";
 
@@ -49,6 +49,8 @@ export function RightInspector() {
   const inspectorFocusNonce = usePanelStore((s) => s.inspectorFocusNonce);
   const rightPanelTab = usePanelStore((s) => s.rightPanelTab);
   const setRightPanelTab = usePanelStore((s) => s.setRightPanelTab);
+  const rightInspectorOpen = usePanelStore((s) => s.rightInspectorOpen);
+  const setRightInspectorOpen = usePanelStore((s) => s.setRightInspectorOpen);
   const compNameInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -118,7 +120,7 @@ export function RightInspector() {
     const counts = new Map<string, number>();
     for (const cutout of doorCutoutSpec.cutouts) {
       if (cutout.kind === "circle") {
-        const key = `Ø${cutout.mainDiameterMm ?? 22.5}mm`;
+        const key = `Ø${cutout.mainDiameterMm ?? 22}mm`;
         counts.set(key, (counts.get(key) ?? 0) + 1);
       } else if (cutout.kind === "rect") {
         const key = `□ ${cutout.rectWidthMm ?? 92}×${cutout.rectHeightMm ?? 92}mm`;
@@ -137,54 +139,65 @@ export function RightInspector() {
   }, [doorCutoutSpec]);
 
   const inputClass =
-    "w-full rounded-lg border border-[#e2e8f0] dark:border-white/10 bg-[#f8fafc] dark:bg-[#090b10] px-2.5 py-1.5 font-sans text-xs tabular-nums text-[#0f172a] dark:text-slate-100 focus:border-[#0284c7] dark:focus:border-white/30 focus:outline-none";
+    "w-full rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#0d111a] px-2.5 py-1.5 font-sans text-xs tabular-nums text-zinc-900 dark:text-slate-100 shadow-xs focus:border-zinc-950 dark:focus:border-white/30 focus:outline-none transition-colors";
   const cardClass =
-    "rounded-xl border border-[#e2e8f0] dark:border-white/10 bg-white dark:bg-[#171a21] p-3 shadow-xs dark:shadow-none";
+    "rounded-xl border border-zinc-200/80 dark:border-white/10 bg-white dark:bg-[#171a21] p-3.5 shadow-xs dark:shadow-none";
   const subBoxClass =
-    "rounded-lg border border-[#e2e8f0] dark:border-white/5 bg-[#f8fafc] dark:bg-[#090b10]";
+    "rounded-lg border border-zinc-200/70 dark:border-white/10 bg-zinc-50 dark:bg-[#0d111a]";
 
   return (
-    <aside
-      onClick={(e) => e.stopPropagation()}
-      className="flex h-full w-[300px] sm:w-[330px] lg:w-[350px] shrink-0 flex-col border-l border-[#e2e8f0] dark:border-white/10 bg-[#f8fafc]/95 dark:bg-[#0c0e14]/95 text-xs text-[#0f172a] dark:text-slate-200 backdrop-blur-xl"
+    <SideSheet
+      isOpen={rightInspectorOpen}
+      onClose={() => setRightInspectorOpen(false)}
+      side="right"
+      modal={false}
+      widthClassName="w-full sm:w-[350px] md:w-[380px]"
+      className="select-none pointer-events-auto"
     >
-      {/* Tabbed Sidebar Header */}
-      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[#e2e8f0] dark:border-white/10 px-3 py-2.5">
-        <div className="flex flex-1 items-center rounded-lg border border-[#e2e8f0] dark:border-white/10 bg-[#f1f5f9] dark:bg-[#171a21] p-0.5">
+      <SideSheetHeader
+        title="Panel Inspector"
+        icon={<Sliders className="w-4 h-4" />}
+        onClose={() => setRightInspectorOpen(false)}
+        className="py-3.5"
+      />
+
+      {/* RelayTest shadcn-style Segmented Tabs with Icons */}
+      <div className="px-5 pt-3 pb-2 shrink-0">
+        <div className="grid grid-cols-3 p-1 rounded-lg bg-zinc-100/80 dark:bg-white/5 text-zinc-600 dark:text-zinc-400 text-xs font-medium">
           <button
             type="button"
             onClick={() => setRightPanelTab("inspector")}
-            className={`flex flex-1 items-center justify-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition-all cursor-pointer ${
+            className={`flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-md text-xs font-medium transition-all cursor-pointer ${
               rightPanelTab === "inspector"
-                ? "bg-white dark:bg-[#222733] text-[#0f172a] dark:text-white shadow-xs"
-                : "text-[#64748b] dark:text-slate-400 hover:text-[#0f172a] dark:hover:text-white"
+                ? "bg-white dark:bg-[#222733] text-zinc-900 dark:text-white shadow-xs"
+                : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
             }`}
           >
-            <Sliders className="h-3 w-3 shrink-0" />
+            <Sliders className="h-3.5 w-3.5 shrink-0" />
             <span>Inspector</span>
           </button>
           <button
             type="button"
             onClick={() => setRightPanelTab("panel")}
-            className={`flex flex-1 items-center justify-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition-all cursor-pointer ${
+            className={`flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-md text-xs font-medium transition-all cursor-pointer ${
               rightPanelTab === "panel"
-                ? "bg-white dark:bg-[#222733] text-[#0f172a] dark:text-white shadow-xs"
-                : "text-[#64748b] dark:text-slate-400 hover:text-[#0f172a] dark:hover:text-white"
+                ? "bg-white dark:bg-[#222733] text-zinc-900 dark:text-white shadow-xs"
+                : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
             }`}
           >
-            <Layers className="h-3 w-3 shrink-0" />
-            <span>Components</span>
+            <Layers className="h-3.5 w-3.5 shrink-0" />
+            <span>Parts</span>
           </button>
           <button
             type="button"
             onClick={() => setRightPanelTab("bom")}
-            className={`flex flex-1 items-center justify-center gap-1 rounded-md px-2 py-1 text-[11px] font-semibold transition-all cursor-pointer ${
+            className={`flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-md text-xs font-medium transition-all cursor-pointer ${
               rightPanelTab === "bom"
-                ? "bg-white dark:bg-[#222733] text-[#0f172a] dark:text-white shadow-xs"
-                : "text-[#64748b] dark:text-slate-400 hover:text-[#0f172a] dark:hover:text-white"
+                ? "bg-white dark:bg-[#222733] text-zinc-900 dark:text-white shadow-xs"
+                : "text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white"
             }`}
           >
-            <ClipboardList className="h-3 w-3 shrink-0" />
+            <FileSpreadsheet className="h-3.5 w-3.5 shrink-0" />
             <span>BOM</span>
           </button>
         </div>
@@ -195,9 +208,9 @@ export function RightInspector() {
       ) : rightPanelTab === "panel" ? (
         <ComponentsLayersTab />
       ) : (
-        <div className="min-h-0 flex-1 overflow-y-auto p-3 space-y-3">
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3 space-y-3.5">
           <div className="flex items-center justify-between px-0.5">
-            <span className="font-sans text-[10px] font-semibold uppercase tracking-wider text-[#64748b] dark:text-slate-400">
+            <span className="font-sans text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
               Properties ({displayUnit})
             </span>
           </div>
@@ -442,16 +455,6 @@ export function RightInspector() {
               )}
             </div>
           )}
-
-          <div className={`${cardClass} space-y-1.5`}>
-            <p className="text-xs text-[#334155] dark:text-slate-300">
-              Select a DIN rail, wire duct, component, or wire in the{" "}
-              {viewportMode.toUpperCase()} viewport.
-            </p>
-            <p className="font-sans text-[11px] text-[#94a3b8] dark:text-slate-500">
-              Drag items on the mounting plate to snap to grid or nearest DIN rail.
-            </p>
-          </div>
 
           <PanelSetupTab />
 
@@ -1271,119 +1274,122 @@ export function RightInspector() {
             </div>
           )}
 
-          {/* Material & Appearance Picker */}
-          <div className="space-y-1.5 border-t border-[#e2e8f0] dark:border-white/10 pt-2.5">
-            <span className="text-xs font-semibold text-[#64748b] dark:text-slate-400">
-              Material & Appearance
-            </span>
-            <div className="grid grid-cols-2 gap-1.5">
-              {(Object.keys(MATERIAL_PRESETS) as MaterialType[]).map((matKey) => {
-                const preset = MATERIAL_PRESETS[matKey];
-                const isSelectedMat = (cad.materialType ?? "copper") === matKey;
-                return (
-                  <button
-                    key={matKey}
-                    type="button"
-                    onClick={() => updateCadAsset(cad.id, { materialType: matKey })}
-                    className={`flex items-center gap-2 rounded-md border p-1.5 text-left text-xs transition-all ${
-                      isSelectedMat
-                        ? "border-sky-500 bg-sky-50 dark:bg-sky-950/40 font-semibold shadow-xs"
-                        : "border-[#e2e8f0] dark:border-white/10 bg-[#f8fafc] dark:bg-[#090b10] hover:border-[#cbd5e1] dark:hover:border-white/20"
-                    }`}
-                  >
-                    <span
-                      className="h-3.5 w-3.5 shrink-0 rounded-full border shadow-2xs"
-                      style={{
-                        backgroundColor: preset.fillColor,
-                        borderColor: preset.borderColor,
-                      }}
-                    />
-                    <span className="truncate text-[11px] text-[#0f172a] dark:text-slate-200">
-                      {preset.name}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
           {/* Quick Pin Generators along Center & Edges */}
-          <div className="space-y-1.5 border-t border-[#e2e8f0] dark:border-white/10 pt-2.5">
-            <span className="text-xs font-semibold text-[#64748b] dark:text-slate-400">
-              Quick Pin Placement
-            </span>
-            <div className="grid grid-cols-3 gap-1">
-              <button
-                type="button"
-                onClick={() => {
-                  const w = effBounds.widthMm;
-                  const h = effBounds.heightMm;
-                  // Center pin
-                  addPinToAsset(cad.id, {
-                    label: `PIN-${cad.pins.length + 1}`,
-                    localXMm: 0,
-                    localYMm: 0,
-                    localZMm: 0,
-                  });
-                }}
-                className="rounded border border-[#e2e8f0] dark:border-white/10 bg-[#f8fafc] dark:bg-[#090b10] px-1.5 py-1 text-[10px] font-medium text-[#0f172a] dark:text-slate-200 hover:border-sky-500 hover:text-sky-600 transition-colors"
-                title="Add 1 pin at center"
-              >
-                + Center Pin
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const w = effBounds.widthMm;
-                  const h = effBounds.heightMm;
-                  const isHoriz = w >= h;
-                  const count = 3;
-                  const step = (isHoriz ? w : h) / (count + 1);
-                  const labels = ["L1-IN", "L1-OUT1", "L1-OUT2"];
-                  for (let i = 0; i < count; i++) {
-                    const offset = -((isHoriz ? w : h) / 2) + step * (i + 1);
-                    addPinToAsset(cad.id, {
-                      label: labels[i] || `P${cad.pins.length + i + 1}`,
-                      localXMm: isHoriz ? Number(offset.toFixed(1)) : 0,
-                      localYMm: isHoriz ? 0 : Number(offset.toFixed(1)),
-                      localZMm: 0,
-                    });
-                  }
-                }}
-                className="rounded border border-[#e2e8f0] dark:border-white/10 bg-[#f8fafc] dark:bg-[#090b10] px-1.5 py-1 text-[10px] font-medium text-[#0f172a] dark:text-slate-200 hover:border-sky-500 hover:text-sky-600 transition-colors"
-                title="Add 3 pins distributed along axis (L1-IN, OUT1, OUT2)"
-              >
-                + 3 Bus Pins
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const w = effBounds.widthMm;
-                  const h = effBounds.heightMm;
-                  const hw = Number((w / 2 - 2).toFixed(1));
-                  const hh = Number((h / 2 - 2).toFixed(1));
-                  const corners = [
-                    { x: -hw, y: -hh, l: "GND-1" },
-                    { x: hw, y: -hh, l: "GND-2" },
-                    { x: -hw, y: hh, l: "GND-3" },
-                    { x: hw, y: hh, l: "GND-4" },
-                  ];
-                  for (const c of corners) {
-                    addPinToAsset(cad.id, {
-                      label: c.l,
-                      localXMm: c.x,
-                      localYMm: c.y,
-                      localZMm: 0,
-                    });
-                  }
-                }}
-                className="rounded border border-[#e2e8f0] dark:border-white/10 bg-[#f8fafc] dark:bg-[#090b10] px-1.5 py-1 text-[10px] font-medium text-[#0f172a] dark:text-slate-200 hover:border-sky-500 hover:text-sky-600 transition-colors"
-                title="Add 4 corner mounting hole pins"
-              >
-                + 4 Edges
-              </button>
-            </div>
-          </div>
+          {(() => {
+            const addDistributedAxisPins = (addCount: number) => {
+              const w = effBounds.widthMm;
+              const h = effBounds.heightMm;
+              const isHoriz = w >= h;
+              const span = isHoriz ? w : h;
+
+              // Separate existing pins along the main center axis vs off-axis pins
+              const axisPins = cad.pins
+                .filter((p) => Math.abs(isHoriz ? p.localYMm : p.localXMm) <= 2)
+                .sort((a, b) =>
+                  isHoriz ? a.localXMm - b.localXMm : a.localYMm - b.localYMm
+                );
+              const otherPins = cad.pins.filter(
+                (p) => Math.abs(isHoriz ? p.localYMm : p.localXMm) > 2
+              );
+
+              const usedLabels = new Set(cad.pins.map((p) => p.label.toUpperCase()));
+              let nextNum = 1;
+              const nextUniqueLabel = () => {
+                while (usedLabels.has(`P${nextNum}`)) nextNum++;
+                const lbl = `P${nextNum}`;
+                usedLabels.add(lbl);
+                nextNum++;
+                return lbl;
+              };
+
+              const now = Date.now();
+              const newPins = Array.from({ length: addCount }, (_, idx) => ({
+                id: `pin-${now}-${idx}-${Math.random().toString(36).slice(2, 6)}`,
+                label: nextUniqueLabel(),
+                localXMm: 0,
+                localYMm: 0,
+                localZMm: 0,
+              }));
+
+              const combinedAxis = [...axisPins, ...newPins];
+              const total = combinedAxis.length;
+              const step = span / (total + 1);
+              const redistributed = combinedAxis.map((p, idx) => {
+                const offset = Number((-span / 2 + step * (idx + 1)).toFixed(1));
+                return {
+                  ...p,
+                  localXMm: isHoriz ? offset : 0,
+                  localYMm: isHoriz ? 0 : offset,
+                };
+              });
+
+              updateCadAsset(cad.id, { pins: [...otherPins, ...redistributed] });
+            };
+
+            const addCornerPins = () => {
+              const w = effBounds.widthMm;
+              const h = effBounds.heightMm;
+              const hw = Number((w / 2 - 2).toFixed(1));
+              const hh = Number((h / 2 - 2).toFixed(1));
+              const corners = [
+                { x: -hw, y: -hh, l: "C1" },
+                { x: hw, y: -hh, l: "C2" },
+                { x: -hw, y: hh, l: "C3" },
+                { x: hw, y: hh, l: "C4" },
+              ];
+              const now = Date.now();
+              const additions = corners
+                .filter(
+                  (c) =>
+                    !cad.pins.some(
+                      (p) => Math.hypot(p.localXMm - c.x, p.localYMm - c.y) < 2
+                    )
+                )
+                .map((c, idx) => ({
+                  id: `pin-${now}-c${idx}-${Math.random().toString(36).slice(2, 6)}`,
+                  label: c.l,
+                  localXMm: c.x,
+                  localYMm: c.y,
+                  localZMm: 0,
+                }));
+              if (additions.length === 0) return;
+              updateCadAsset(cad.id, { pins: [...cad.pins, ...additions] });
+            };
+
+            return (
+              <div className="space-y-1.5 border-t border-[#e2e8f0] dark:border-white/10 pt-2.5">
+                <span className="text-xs font-semibold text-[#64748b] dark:text-slate-400">
+                  Quick Pin Placement
+                </span>
+                <div className="grid grid-cols-3 gap-1">
+                  <button
+                    type="button"
+                    onClick={() => addDistributedAxisPins(1)}
+                    className="rounded border border-[#e2e8f0] dark:border-white/10 bg-[#f8fafc] dark:bg-[#090b10] px-1.5 py-1 text-[10px] font-medium text-[#0f172a] dark:text-slate-200 hover:border-sky-500 hover:text-sky-600 transition-colors cursor-pointer"
+                    title="Tambah 1 pin dan distribusikan rata sepanjang sumbu"
+                  >
+                    +1 Pin
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => addDistributedAxisPins(3)}
+                    className="rounded border border-[#e2e8f0] dark:border-white/10 bg-[#f8fafc] dark:bg-[#090b10] px-1.5 py-1 text-[10px] font-medium text-[#0f172a] dark:text-slate-200 hover:border-sky-500 hover:text-sky-600 transition-colors cursor-pointer"
+                    title="Tambah 3 pin dan distribusikan rata sepanjang sumbu"
+                  >
+                    +3 Pins
+                  </button>
+                  <button
+                    type="button"
+                    onClick={addCornerPins}
+                    className="rounded border border-[#e2e8f0] dark:border-white/10 bg-[#f8fafc] dark:bg-[#090b10] px-1.5 py-1 text-[10px] font-medium text-[#0f172a] dark:text-slate-200 hover:border-sky-500 hover:text-sky-600 transition-colors cursor-pointer"
+                    title="Tambah 4 pin di sudut shape"
+                  >
+                    +4 Corners
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
 
           <label className="block space-y-1 border-t border-[#e2e8f0] dark:border-white/10 pt-2.5">
             <span className="text-xs text-[#64748b] dark:text-slate-400">
@@ -1476,6 +1482,6 @@ export function RightInspector() {
       })()}
         </div>
       )}
-    </aside>
+    </SideSheet>
   );
 }

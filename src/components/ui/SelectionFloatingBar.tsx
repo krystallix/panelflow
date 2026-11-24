@@ -9,9 +9,14 @@ import {
   AlignStartVertical,
   ArrowRightLeft,
   Copy,
+  Group,
+  Lock,
+  MapPin,
   Maximize2,
   RotateCw,
   Trash2,
+  Ungroup,
+  Unlock,
 } from "lucide-react";
 import { usePanelStore } from "@/store/usePanelStore";
 import type { WireColorCode } from "@/types/panel";
@@ -57,6 +62,8 @@ export function SelectionFloatingBar({
   const removeCadAsset = usePanelStore((s) => s.removeCadAsset);
   const removeRail = usePanelStore((s) => s.removeRail);
   const removeDuct = usePanelStore((s) => s.removeDuct);
+  const updateComponent = usePanelStore((s) => s.updateComponent);
+  const updateCadAsset = usePanelStore((s) => s.updateCadAsset);
   const updateWire = usePanelStore((s) => s.updateWire);
   const updateWires = usePanelStore((s) => s.updateWires);
   const removeWire = usePanelStore((s) => s.removeWire);
@@ -69,6 +76,12 @@ export function SelectionFloatingBar({
   const alignComponentToRail = usePanelStore((s) => s.alignComponentToRail);
   const autoResizeToFit = usePanelStore((s) => s.autoResizeToFit);
   const autoResizeSelectedToFit = usePanelStore((s) => s.autoResizeSelectedToFit);
+  const groupSelectedItems = usePanelStore((s) => s.groupSelectedItems);
+  const ungroupSelectedItems = usePanelStore((s) => s.ungroupSelectedItems);
+  const toggleLockSelectedItems = usePanelStore((s) => s.toggleLockSelectedItems);
+  const isPinMarkingMode = usePanelStore((s) => s.isPinMarkingMode);
+  const activeMarkingAssetId = usePanelStore((s) => s.activeMarkingAssetId);
+  const setPinMarkingMode = usePanelStore((s) => s.setPinMarkingMode);
 
   const [alignOpen, setAlignOpen] = useState(false);
   const alignRef = useRef<HTMLDivElement>(null);
@@ -118,6 +131,54 @@ export function SelectionFloatingBar({
     activeSingle?.kind === "wire"
       ? wires.find((w) => w.id === activeSingle.id) ?? null
       : null;
+
+  const editableLabelTarget = singleComp ?? singleCad;
+  const [labelDraft, setLabelDraft] = useState("");
+  const lastEditableIdRef = useRef<string | null>(null);
+  const [wireFreeLabelDraft, setWireFreeLabelDraft] = useState("");
+  const lastWireFreeIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const nextId = editableLabelTarget?.id ?? null;
+    const nextName = editableLabelTarget?.name ?? "";
+    if (nextId !== lastEditableIdRef.current || nextName !== labelDraft) {
+      lastEditableIdRef.current = nextId;
+      setLabelDraft(nextName);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editableLabelTarget?.id, editableLabelTarget?.name]);
+
+  useEffect(() => {
+    const nextId = singleWire?.id ?? null;
+    const nextLabel = singleWire?.toFreeLabel ?? "";
+    if (nextId !== lastWireFreeIdRef.current || nextLabel !== wireFreeLabelDraft) {
+      lastWireFreeIdRef.current = nextId;
+      setWireFreeLabelDraft(nextLabel);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [singleWire?.id, singleWire?.toFreeLabel]);
+
+  const commitWireFreeLabel = () => {
+    if (!singleWire || !singleWire.toFreePoint) return;
+    const nextLabel = wireFreeLabelDraft.trim();
+    if (nextLabel === (singleWire.toFreeLabel ?? "")) return;
+    updateWire(singleWire.id, { toFreeLabel: nextLabel });
+  };
+
+  const commitLabelDraft = () => {
+    if (!editableLabelTarget) return;
+    const nextName = labelDraft.trim();
+    if (!nextName) {
+      setLabelDraft(editableLabelTarget.name);
+      return;
+    }
+    if (nextName === editableLabelTarget.name) return;
+    if (singleComp) {
+      updateComponent(singleComp.id, { name: nextName });
+    } else if (singleCad) {
+      updateCadAsset(singleCad.id, { name: nextName });
+    }
+  };
 
   const isMultiAllWires =
     isMulti && selectedIds.every((sel) => sel.kind === "wire");
@@ -191,6 +252,38 @@ export function SelectionFloatingBar({
       ? "Auto-Resize to Height"
       : "Auto-Resize to Width";
 
+  // Lock & Group state across single or multi-select (Component, CAD, Rail, Duct)
+  const effectiveTargets = isMulti
+    ? selectedIds
+    : activeSingle
+      ? [activeSingle]
+      : [];
+  const lockableTargets = effectiveTargets.filter(
+    (t) =>
+      t.kind === "component" ||
+      t.kind === "cad" ||
+      t.kind === "rail" ||
+      t.kind === "duct"
+  );
+  const resolvedLockStates = lockableTargets.map((t) => {
+    if (t.kind === "component") return Boolean(components.find((c) => c.id === t.id)?.locked);
+    if (t.kind === "cad") return Boolean(cadAssets.find((a) => a.id === t.id)?.locked);
+    if (t.kind === "rail") return Boolean(rails.find((r) => r.id === t.id)?.locked);
+    if (t.kind === "duct") return Boolean(ducts.find((d) => d.id === t.id)?.locked);
+    return false;
+  });
+  const isLockedSelection =
+    resolvedLockStates.length > 0 && resolvedLockStates.every(Boolean);
+  const hasAnyGrouped = lockableTargets.some((t) => {
+    if (t.kind === "component") return Boolean(components.find((c) => c.id === t.id)?.groupId);
+    if (t.kind === "cad") return Boolean(cadAssets.find((a) => a.id === t.id)?.groupId);
+    if (t.kind === "rail") return Boolean(rails.find((r) => r.id === t.id)?.groupId);
+    if (t.kind === "duct") return Boolean(ducts.find((d) => d.id === t.id)?.groupId);
+    return false;
+  });
+  const canGroup = isMulti && lockableTargets.length >= 2;
+  const canLock = lockableTargets.length > 0;
+
   const isActive =
     visible &&
     (isMulti ||
@@ -243,14 +336,37 @@ export function SelectionFloatingBar({
       >
       {isWireSelection ? (
         <>
-          {selectedWires.length > 1 && (
+          {selectedWires.length > 1 ? (
             <>
               <span className="px-1.5 text-[11px] font-semibold text-slate-600 dark:text-zinc-300 whitespace-nowrap">
                 {selectedWires.length} wires
               </span>
               <div className="h-4 w-[1px] mx-0.5 bg-slate-200 dark:bg-white/10" />
             </>
-          )}
+          ) : singleWire?.toFreePoint ? (
+            <>
+              <input
+                type="text"
+                aria-label="Terminal End Label"
+                placeholder="Power Source R..."
+                value={wireFreeLabelDraft}
+                onChange={(e) => setWireFreeLabelDraft(e.target.value)}
+                onBlur={commitWireFreeLabel}
+                onKeyDown={(e) => {
+                  e.stopPropagation();
+                  if (e.key === "Enter") {
+                    commitWireFreeLabel();
+                    e.currentTarget.blur();
+                  } else if (e.key === "Escape") {
+                    setWireFreeLabelDraft(singleWire.toFreeLabel ?? "");
+                    e.currentTarget.blur();
+                  }
+                }}
+                className="w-32 sm:w-36 rounded-lg border border-slate-200 dark:border-white/15 bg-slate-50/90 dark:bg-[#161a23] px-2 py-1 font-mono text-[11px] font-semibold text-slate-800 dark:text-slate-100 outline-none focus:border-sky-500 focus:bg-white dark:focus:bg-[#111622] transition-colors select-text"
+              />
+              <div className="h-4 w-[1px] mx-1 bg-slate-200 dark:bg-white/10" />
+            </>
+          ) : null}
 
           {/* Direct Clickable Color Circles (no RSTN text) */}
           <div className="flex items-center gap-1.5 px-1">
@@ -324,14 +440,37 @@ export function SelectionFloatingBar({
         </>
       ) : (
         <>
-      {isMulti && (
+      {isMulti ? (
         <>
           <span className="px-2 text-[11px] font-medium text-slate-600 dark:text-zinc-300">
             {selectedIds.length} selected
           </span>
           <div className="h-4 w-[1px] mx-0.5 bg-slate-200 dark:bg-white/10" />
         </>
-      )}
+      ) : editableLabelTarget ? (
+        <>
+          <input
+            type="text"
+            aria-label="Component Label"
+            placeholder="Label"
+            value={labelDraft}
+            onChange={(e) => setLabelDraft(e.target.value)}
+            onBlur={commitLabelDraft}
+            onKeyDown={(e) => {
+              e.stopPropagation();
+              if (e.key === "Enter") {
+                commitLabelDraft();
+                e.currentTarget.blur();
+              } else if (e.key === "Escape") {
+                setLabelDraft(editableLabelTarget.name);
+                e.currentTarget.blur();
+              }
+            }}
+            className="w-24 sm:w-28 rounded-lg border border-slate-200 dark:border-white/15 bg-slate-50/90 dark:bg-[#161a23] px-2 py-1 font-mono text-[11px] font-semibold text-slate-800 dark:text-slate-100 outline-none focus:border-sky-500 focus:bg-white dark:focus:bg-[#111622] transition-colors select-text"
+          />
+          <div className="h-4 w-[1px] mx-1 bg-slate-200 dark:bg-white/10" />
+        </>
+      ) : null}
 
       {/* Duplicate (single) / Copy (multi) */}
       <div className="relative group/tip">
@@ -347,6 +486,43 @@ export function SelectionFloatingBar({
           {isMulti ? "Copy (Ctrl+C)" : "Duplicate"}
         </span>
       </div>
+
+      {/* Add / Mark Pin Button (Shape / Custom CAD) */}
+      {singleCad && !isMulti && (
+        <div className="relative group/tip">
+          <button
+            type="button"
+            onClick={() =>
+              setPinMarkingMode(
+                !(isPinMarkingMode && activeMarkingAssetId === singleCad.id),
+                singleCad.id
+              )
+            }
+            aria-label={
+              isPinMarkingMode && activeMarkingAssetId === singleCad.id
+                ? "Done Adding Pins"
+                : "Add Pin"
+            }
+            className={`px-2 py-1 rounded-lg transition-all flex items-center gap-1 text-[11px] font-semibold cursor-pointer ${
+              isPinMarkingMode && activeMarkingAssetId === singleCad.id
+                ? "bg-amber-500 text-black shadow-xs"
+                : "text-slate-700 hover:text-slate-900 hover:bg-slate-200/70 dark:text-zinc-200 dark:hover:text-white dark:hover:bg-white/10"
+            }`}
+          >
+            <MapPin className="h-3.5 w-3.5" />
+            <span>
+              {isPinMarkingMode && activeMarkingAssetId === singleCad.id
+                ? "Done Pin"
+                : "Add Pin"}
+            </span>
+          </button>
+          <span role="tooltip" className={tooltipClass}>
+            {isPinMarkingMode && activeMarkingAssetId === singleCad.id
+              ? "Klik pada shape untuk pasang pin (klik lagi untuk selesai)"
+              : "Tambah Pin Terminal pada Shape"}
+          </span>
+        </div>
+      )}
 
       {/* Rotate +90° (Component / CAD) */}
       {canRotate && (
@@ -515,20 +691,80 @@ export function SelectionFloatingBar({
         </div>
       )}
 
+      {/* Group (Multi-Select >= 2) */}
+      {canGroup && (
+        <div className="relative group/tip">
+          <button
+            type="button"
+            onClick={() => groupSelectedItems()}
+            aria-label="Group (Ctrl+G)"
+            className={btnClass}
+          >
+            <Group className="h-4 w-4" />
+          </button>
+          <span role="tooltip" className={tooltipClass}>
+            Group (Ctrl+G)
+          </span>
+        </div>
+      )}
+
+      {/* Ungroup (if any selected item belongs to a group) */}
+      {hasAnyGrouped && (
+        <div className="relative group/tip">
+          <button
+            type="button"
+            onClick={() => ungroupSelectedItems()}
+            aria-label="Ungroup (Ctrl+Shift+G)"
+            className={btnClass}
+          >
+            <Ungroup className="h-4 w-4" />
+          </button>
+          <span role="tooltip" className={tooltipClass}>
+            Ungroup (Ctrl+Shift+G)
+          </span>
+        </div>
+      )}
+
+      {/* Lock / Unlock */}
+      {canLock && (
+        <div className="relative group/tip">
+          <button
+            type="button"
+            onClick={() => toggleLockSelectedItems()}
+            aria-label={isLockedSelection ? "Unlock (Ctrl+L)" : "Lock (Ctrl+L)"}
+            className={`p-1.5 rounded-lg transition-all flex items-center justify-center cursor-pointer ${
+              isLockedSelection
+                ? "bg-amber-500/15 text-amber-600 hover:bg-amber-500/25 dark:bg-amber-500/20 dark:text-amber-400"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/70 dark:text-zinc-300 dark:hover:text-white dark:hover:bg-white/10"
+            }`}
+          >
+            {isLockedSelection ? (
+              <Lock className="h-4 w-4" />
+            ) : (
+              <Unlock className="h-4 w-4" />
+            )}
+          </button>
+          <span role="tooltip" className={tooltipClass}>
+            {isLockedSelection ? "Unlock (Ctrl+L)" : "Lock (Ctrl+L)"}
+          </span>
+        </div>
+      )}
+
       <div className="h-4 w-[1px] mx-0.5 bg-slate-200 dark:bg-white/10" />
 
       {/* Delete */}
       <div className="relative group/tip">
         <button
           type="button"
+          disabled={isLockedSelection}
           onClick={handleDelete}
           aria-label="Delete"
-          className="p-1.5 rounded-lg transition-all flex items-center justify-center cursor-pointer text-rose-500 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/40"
+          className="p-1.5 rounded-lg transition-all flex items-center justify-center cursor-pointer text-rose-500 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/40 disabled:opacity-35 disabled:pointer-events-none"
         >
           <Trash2 className="h-4 w-4" />
         </button>
         <span role="tooltip" className={tooltipClass}>
-          Delete
+          {isLockedSelection ? "Locked — Unlock to Delete" : "Delete"}
         </span>
       </div>
         </>
